@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Idea, Variant, Video } from "@/db/schema";
 import { Chevron } from "@/components/chevron";
 import { SubmitButton } from "@/components/submit-button";
@@ -76,8 +77,10 @@ export function Board({ t, demoTag, ideas, videos, variants, nextVariantId, next
         {editing.length === 0 && <Empty>{b.editingEmpty}</Empty>}
         {editing.map((video) => (
           <Card key={video.id} tag={demoTag}>
-            <p className="font-semibold">{video.title}</p>
-            <p className="mt-1 text-ink-muted">{b.editingSince(when(t, video.createdAt).label)}</p>
+            <VideoTitle video={video} demo={Boolean(demoTag)} />
+            <p className="mt-1 text-ink-muted">
+              {video.stage === "uploaded" ? t.content.uploadedWait : b.editingSince(when(t, video.createdAt).label)}
+            </p>
           </Card>
         ))}
       </Column>
@@ -90,7 +93,7 @@ export function Board({ t, demoTag, ideas, videos, variants, nextVariantId, next
           const next = rows.find((v) => v.id === nextVariantId);
           return (
             <Card key={video.id} tag={demoTag}>
-              <p className="font-semibold">{video.title}</p>
+              <VideoTitle video={video} demo={Boolean(demoTag)} />
               <p className="mt-1 text-ink-muted">
                 {rows.some((v) => v.status === "processing")
                   ? b.publishingNow
@@ -113,7 +116,7 @@ export function Board({ t, demoTag, ideas, videos, variants, nextVariantId, next
           const measuring = published.every((v) => v.publishedAt && Date.now() - v.publishedAt.getTime() < DAY);
           return (
             <Card key={video.id} tag={demoTag}>
-              <p className="font-semibold">{video.title}</p>
+              <VideoTitle video={video} demo={Boolean(demoTag)} />
               <p className="mt-1 text-ink-muted">
                 {published.length === 0
                   ? b.noneOut
@@ -129,6 +132,16 @@ export function Board({ t, demoTag, ideas, videos, variants, nextVariantId, next
         })}
       </Column>
     </div>
+  );
+}
+
+// Real content opens its page (instructions, versions, actions); examples don't.
+function VideoTitle({ video, demo }: { video: Video; demo: boolean }) {
+  if (demo) return <p className="font-semibold">{video.title}</p>;
+  return (
+    <Link href={`/conteudo/${video.id}`} className="font-semibold underline-offset-4 hover:underline">
+      {video.title}
+    </Link>
   );
 }
 

@@ -38,4 +38,5 @@ export const statusTone: Record<Variant["status"], string> = {
   queued: "text-ink",
   failed: "text-bad",
   skipped: "text-off line-through",
+  revision: "text-busy",
 };

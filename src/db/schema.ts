@@ -6,6 +6,7 @@ export const variantStatus = pgEnum("variant_status", [
   "published",
   "failed",
   "skipped",
+  "revision", // creator asked to redo this version; the Mac editor picks it up
 ]);
 
 // Connected accounts: Instagram profiles (to post) and AI providers (to edit/analyse).
@@ -61,6 +62,12 @@ export const videos = pgTable("videos", {
   slug: text("slug").notNull().unique(),
   title: text("title").notNull(),
   sourceFile: text("source_file"),
+  // What the creator asked for before editing.
+  brief: text("brief"),
+  baseCaption: text("base_caption"),
+  // Uploaded from the dashboard: waits here until the Mac editor downloads it.
+  rawUrl: text("raw_url"),
+  stage: text("stage").notNull().default("editing"), // "uploaded" | "editing"
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
@@ -79,6 +86,7 @@ export const variants = pgTable("variants", {
   permalink: text("permalink"),
   error: text("error"),
   attempts: integer("attempts").notNull().default(0),
+  revisionNote: text("revision_note"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
   // Instagram insights, refreshed by the cron tick for recent posts

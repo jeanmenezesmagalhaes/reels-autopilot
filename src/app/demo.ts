@@ -63,7 +63,7 @@ const copy = {
   },
 };
 
-const base = { caption: "", containerId: null, mediaId: null, permalink: null, error: null, attempts: 0, reach: null, likes: null, comments: null, metricsAt: null };
+const base = { caption: "", revisionNote: null, containerId: null, mediaId: null, permalink: null, error: null, attempts: 0, reach: null, likes: null, comments: null, metricsAt: null };
 
 export function demoContent(locale: Locale, now = Date.now()) {
   const c = copy[locale];
@@ -71,7 +71,8 @@ export function demoContent(locale: Locale, now = Date.now()) {
     id: -(i + 1), title, notes, source: i === 0 ? "analise" : "jean", status: "planned", createdAt: new Date(now - i * H),
   }));
   const videos: Video[] = c.videos.map((title, i) => ({
-    id: -(i + 1), slug: `exemplo-${i + 1}`, title, sourceFile: null, createdAt: new Date(now - (i === 2 ? 1 : 3 - i) * D),
+    id: -(i + 1), slug: `exemplo-${i + 1}`, title, sourceFile: null, brief: null, baseCaption: null, rawUrl: null, stage: "editing",
+    createdAt: new Date(now - (i === 2 ? 1 : 3 - i) * D),
   }));
   const v = (id: number, videoId: number, label: string, extra: Partial<Variant>): Variant => ({
     ...base, id: -id, videoId: -videoId, label, blobUrl: "", durationS: 30, status: "queued", createdAt: new Date(now - 2 * D), publishedAt: null,

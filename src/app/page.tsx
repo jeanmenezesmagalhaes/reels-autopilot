@@ -1,5 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db, getSetting, schema } from "@/db";
+import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { getDictionary } from "@/i18n";
 import { when } from "@/lib/format";
@@ -89,7 +90,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const steps = [
     { key: "instagram" as const, done: igReady, href: "/api/instagram/connect" },
     { key: "ai" as const, done: status.aiReady, href: "/ajustes#ia" },
-    { key: "video" as const, done: videos.length > 0 },
+    { key: "video" as const, done: videos.length > 0, href: "/novo" },
     { key: "result" as const, done: hasResult },
   ];
   const showOnboarding = onboardingHidden !== "true" && steps.some((s) => !s.done);
@@ -127,6 +128,13 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               {note && <p className="mt-1 text-[15px] text-busy">{note}</p>}
             </div>
           </div>
+          <div className="flex flex-wrap gap-2.5">
+            <Link
+              href="/novo"
+              className="rounded-full bg-ink px-5 py-2 text-[15px] font-medium text-ground transition-[opacity,transform] duration-150 hover:opacity-85 active:scale-[0.97]"
+            >
+              {t.newVideo.button}
+            </Link>
           {canControl && (
             <div className="flex gap-2.5">
               <form action={togglePause}>
@@ -136,13 +144,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               </form>
               {!isPaused && (
                 <form action={postNextNow}>
-                  <SubmitButton pending={h.posting} variant="primary">
+                  <SubmitButton pending={h.posting} variant="quiet">
                     {h.postNow}
                   </SubmitButton>
                 </form>
               )}
             </div>
           )}
+          </div>
         </div>
       </section>
 

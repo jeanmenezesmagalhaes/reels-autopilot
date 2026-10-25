@@ -10,10 +10,16 @@ Pastas (`REELS_DIR`, default `~/Movies/ReelsAutopilot`):
 
 ## Passos
 
-0. Sempre, antes de tudo: `npm run -s pipeline:run -- ping` (avisa o painel que o editor está ativo).
-1. Lista `01-cru/` (`.mov`, `.mp4`, `.m4v`). Nada novo e nada em `02-editando/` → para aqui, sem fazer mais nada.
+0. Sempre, antes de tudo: `npm run -s pipeline:run -- sync`. Baixa para `01-cru/` os vídeos enviados pelo painel
+   (cada um com um `<slug>.brief.json` ao lado), atualiza `revisoes.json` e avisa o painel que o editor está ativo.
+1. Lista `01-cru/` (`.mov`, `.mp4`, `.m4v`). Se tem `revisoes.json` com itens, faz a seção **Refazer versões** abaixo primeiro.
+   Nada novo, nada em `02-editando/` e nenhuma revisão → para aqui, sem fazer mais nada.
 2. Pega **um** vídeo (o mais antigo). Ignora arquivo modificado há menos de 2 min (ainda copiando).
-   Move para `02-editando/<slug>/source.<ext>`. Slug: `aaaa-mm-dd-tema-curto`, só `[a-z0-9-]`.
+   Se existir `<nome>.brief.json` ao lado do vídeo, **usa o `slug` e o `title` dele** e segue o `brief` (instruções da
+   pessoa, acima do padrão de edição quando conflitarem) e a `baseCaption` (legenda base: mantém a ideia e o tom em
+   todas as captions, adaptando abertura e tamanho por versão). Move o brief junto.
+   Sem brief: slug `aaaa-mm-dd-tema-curto`, só `[a-z0-9-]`.
+   Move para `02-editando/<slug>/source.<ext>`.
    Avisa o painel que a edição começou (o card aparece em "Em edição"):
    `npm run pipeline:report -- editing <slug> "<título curto>"`
 3. Roda `npm run pipeline:report` e lê o campo `learnings`. **Aplica o que está lá** — é o que os Trial Reels
@@ -62,6 +68,16 @@ O objetivo é retenção. Vídeo parado não viraliza.
 10. Move o original de `02-editando/<slug>/` para `03-prontos/<slug>/source.<ext>` e apaga a pasta vazia.
 11. Roda `npm run pipeline:upload`. Se falhar, deixa a pasta em `03-prontos` e reporta o erro.
 12. Resumo final: vídeo processado, variantes criadas, o que falhou.
+
+## Refazer versões (`revisoes.json`)
+
+Cada item tem `slug`, `label`, `caption` atual e `note` (o que a pessoa quer diferente: outro formato de legenda,
+outro corte, outra abertura…).
+1. O vídeo original está em `04-na-fila/<slug>/source.*` (e o brief em `04-na-fila/<slug>/`, se houver).
+2. Refaz **só aquela versão** seguindo a `note`, mantendo o resto do padrão. Se a nota for só sobre a legenda do post,
+   reaproveita o vídeo da versão e muda só o texto.
+3. Exporta com `pipeline/normalize.sh` para `04-na-fila/<slug>/<label>.mp4`, escreve a nova caption num arquivo
+   e roda `npm run pipeline:revise -- <slug> <label> <arquivo.mp4> <caption.txt>`. A versão volta para a fila.
 
 ## Regras
 

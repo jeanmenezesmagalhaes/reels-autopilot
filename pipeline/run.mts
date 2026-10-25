@@ -4,17 +4,20 @@
 //   npm run pipeline:run -- edit
 //   npm run pipeline:run -- analyze
 //   npm run pipeline:run -- ping      (only reports which AI is connected)
+//   npm run pipeline:run -- sync      (downloads dashboard uploads/redo requests, then ping)
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline as streamPipeline } from "node:stream/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
 const task = process.argv[2];
 const prompts: Record<string, string> = { edit: "EDIT_PROMPT.md", analyze: "ANALYZE_PROMPT.md" };
-if (!prompts[task] && task !== "ping") throw new Error("usage: npm run pipeline:run -- edit|analyze|ping");
+if (!prompts[task] && task !== "ping" && task !== "sync") throw new Error("usage: npm run pipeline:run -- edit|analyze|ping|sync");
 
 const prompt =
-  task === "ping"
+  task === "ping" || task === "sync"
     ? ""
     : `Follow these instructions exactly. Working directory: ${process.cwd()}.\n\n` +
       readFileSync(join(import.meta.dirname, prompts[task]), "utf8");
@@ -74,16 +77,48 @@ for (const p of (process.env.AI_PROVIDERS ?? "claude,codex").split(",").map((x) 
   if (connected(p) || (p === "claude" && has("claude") && (await claudeKeyFromAjustes()))) order.push(p);
 }
 
+const root = process.env.REELS_DIR ?? join(homedir(), "Movies", "ReelsAutopilot");
+
+// Pull work from the dashboard: videos uploaded there (saved to 01-cru with their
+// brief next to them) and versions the creator asked to redo (revisoes.json).
+async function syncInbox() {
+  const { APP_URL, PIPELINE_SECRET } = process.env;
+  if (!APP_URL || !PIPELINE_SECRET) return;
+  const headers = { authorization: `Bearer ${PIPELINE_SECRET}`, "content-type": "application/json" };
+  const res = await fetch(new URL("/api/inbox", APP_URL), { headers }).catch(() => undefined);
+  if (!res?.ok) return;
+  const inbox = (await res.json()) as {
+    uploads: { slug: string; title: string; brief: string | null; baseCaption: string | null; rawUrl: string }[];
+    revisions: { slug: string; title: string; label: string; caption: string; note: string | null }[];
+  };
+  mkdirSync(join(root, "01-cru"), { recursive: true });
+  for (const u of inbox.uploads) {
+    const ext = (u.rawUrl.split("?")[0].match(/\.(mov|mp4|m4v)$/i)?.[1] ?? "mp4").toLowerCase();
+    const file = await fetch(u.rawUrl).catch(() => undefined);
+    if (!file?.ok || !file.body) continue;
+    await streamPipeline(Readable.fromWeb(file.body as never), createWriteStream(join(root, "01-cru", `${u.slug}.${ext}`)));
+    writeFileSync(
+      join(root, "01-cru", `${u.slug}.brief.json`),
+      JSON.stringify({ slug: u.slug, title: u.title, brief: u.brief, baseCaption: u.baseCaption }, null, 2),
+    );
+    await fetch(new URL("/api/inbox/claim", APP_URL), { method: "POST", headers, body: JSON.stringify({ slug: u.slug }) });
+    console.log(`↓ ${u.title}`);
+  }
+  writeFileSync(join(root, "revisoes.json"), JSON.stringify(inbox.revisions, null, 2));
+}
+
 // Don't spend the creator's AI limits when there is nothing to edit.
 function nothingToEdit() {
-  const root = process.env.REELS_DIR ?? join(homedir(), "Movies", "ReelsAutopilot");
   const has = (dir: string, re: RegExp) => existsSync(join(root, dir)) && readdirSync(join(root, dir)).some((f) => re.test(f));
-  return !has("01-cru", /\.(mov|mp4|m4v)$/i) && !has("02-editando", /^[^.]/);
+  const revisions = existsSync(join(root, "revisoes.json")) && JSON.parse(readFileSync(join(root, "revisoes.json"), "utf8")).length > 0;
+  return !has("01-cru", /\.(mov|mp4|m4v)$/i) && !has("02-editando", /^[^.]/) && !revisions;
 }
+
+if (task === "edit" || task === "sync") await syncInbox();
 
 connectedList = order;
 
-if (task === "ping" || (task === "edit" && nothingToEdit())) {
+if (task === "ping" || task === "sync" || (task === "edit" && nothingToEdit())) {
   await heartbeat(order[0] ?? "none", order.length > 0);
   console.log(order.length ? `AI connected: ${order.join(" → ")}` : "No AI connected. Run: npm run setup");
   if (task === "edit") console.log("Nothing to edit.");

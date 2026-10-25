@@ -14,7 +14,8 @@
     "pipeline:run": "tsx --env-file=.env.local pipeline/run.mts",
     "setup:google": "tsx scripts/setup-google-login.mts",
     "setup": "tsx scripts/setup-mac.mts",
-    "setup:helper": "tsx scripts/install-helper.mts"
+    "setup:helper": "tsx scripts/install-helper.mts",
+    "pipeline:revise": "tsx --env-file=.env.local pipeline/revise.mts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",

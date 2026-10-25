@@ -51,7 +51,7 @@ const body = z.union([
   z.object({
     heartbeat: z.object({
       provider: z.enum(["claude", "codex", "none"]),
-      task: z.enum(["edit", "analyze", "ping"]),
+      task: z.enum(["edit", "analyze", "ping", "sync"]),
       ok: z.boolean(),
       // Every AI subscription logged in on the creator's Mac.
       connected: z.array(z.enum(["claude", "codex"])).max(2).default([]),
