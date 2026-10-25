@@ -1,35 +1,64 @@
 # Reels Autopilot
 
-Vídeo cru no Mac → Claude edita 5+ versões → fila na Vercel → posta como **Trial Reel** no Instagram, espaçado no tempo.
+Vídeo cru no Mac → Claude edita 5+ versões → fila na Vercel → posta como **Trial Reel** no Instagram em horários diferentes → mede → aprende → edita melhor.
 
-Plano completo, arquitetura e decisões: [PLAN.md](PLAN.md).
+Plano e arquitetura: [PLAN.md](PLAN.md). Produto: [PRODUCT.md](PRODUCT.md).
+
+## Uso no dia a dia
+
+1. Larga o vídeo cru em `~/Movies/ReelsAutopilot/01-cru`.
+2. Pronto. A cada hora o Claude edita (tarefa "Reels Autopilot: editar vídeos novos") e manda para a fila.
+3. A fila posta entre 08h e 22h, `POSTS_PER_DAY` por dia, alternando vídeos.
+4. Todo dia 05:30 o Claude analisa os resultados e atualiza "o que está funcionando" no painel.
+5. Painel: https://reels-autopilot-bay.vercel.app (usuário qualquer, senha `DASHBOARD_PASSWORD`).
+
+## Checklist para ligar (uma vez)
+
+Rodar no terminal, dentro de `~/code/reels-autopilot`. Cada comando pede o valor sem mostrar na tela.
+
+1. **Token do Instagram** (app da Meta → Instagram → API setup with Instagram login → gerar token).
+   Permissões: `instagram_business_basic`, `instagram_business_content_publish`, `instagram_business_manage_insights`.
+   ```bash
+   npx vercel env add IG_USER_ID production
+   ```
+   ```bash
+   npx vercel env add IG_ACCESS_TOKEN production --sensitive
+   ```
+2. **Cron de hora em hora (GitHub Actions)** — copia o `CRON_SECRET` da Vercel para o GitHub:
+   ```bash
+   grep '^CRON_SECRET=' .env.local | cut -d= -f2- | tr -d '"' | gh secret set CRON_SECRET
+   ```
+   ```bash
+   gh variable set APP_URL --body "https://reels-autopilot-bay.vercel.app"
+   ```
+3. **Redeploy** para pegar as env vars novas:
+   ```bash
+   npx vercel deploy --prod
+   ```
+4. **Senha do painel** (guarda no teu gerenciador de senhas):
+   ```bash
+   grep '^DASHBOARD_PASSWORD=' .env.local
+   ```
+5. No painel: **Retomar postagens** (está pausado) e, para testar, **Postar próximo agora**.
+
+## Segurança
+
+- Nenhum segredo no código nem no Git. Tudo em env vars da Vercel; local só em `.env.local` (permissão 600, gitignored).
+- Painel protegido por senha; `/api/*` por segredos separados (`CRON_SECRET`, `PIPELINE_SECRET`).
+- Token do Instagram vai em header, nunca em URL. Renovado sozinho a cada 7 dias.
+- Vídeo fica no Blob só até ser publicado; depois é apagado.
+- Headers `noindex`, `no-referrer`, `X-Frame-Options: DENY`.
+- Nada escuta porta no Mac: a edição roda como tarefa agendada e só fala com a Vercel por HTTPS.
 
 ## Peças
 
 | Onde | O quê |
 |---|---|
-| `~/Movies/ReelsAutopilot/01-cru` | tu larga o vídeo aqui |
-| `pipeline/EDIT_PROMPT.md` | rotina que a tarefa agendada do Claude segue para editar |
-| `pipeline/normalize.sh` | export final no padrão Reels (1080x1920, 30fps, -14 LUFS) |
-| `pipeline/upload.mts` | sobe variantes para Vercel Blob e registra na fila |
-| `src/app/api/ingest` | recebe variantes do Mac (`PIPELINE_SECRET`) |
-| `src/app/api/cron/tick` | Vercel Cron: publica próxima variante como Trial Reel |
-| `src/app/page.tsx` | painel (senha `DASHBOARD_PASSWORD`) |
-
-## Setup
-
-1. Importa o repo na Vercel (vercel.com/new) ou `npx vercel link`.
-2. No projeto Vercel: Storage → criar **Neon Postgres** e **Blob** (preenche `DATABASE_URL` e `BLOB_READ_WRITE_TOKEN`).
-3. Env vars na Vercel: ver `.env.example`. Gera segredos com `openssl rand -hex 32`.
-4. Local:
-   ```bash
-   npm install
-   npx vercel env pull .env.local
-   npm run db:push
-   ```
-5. Testa com um vídeo: larga em `01-cru`, roda a rotina do `EDIT_PROMPT.md`, abre o painel, clica "Postar próximo agora".
-
-## Cron
-
-`vercel.json` roda o tick 1x/dia às 15:00 UTC (12:00 em Brasília) — limite do plano Hobby.
-No Pro, troca para `0 * * * *` e `POSTS_PER_DAY` controla o ritmo.
+| `pipeline/EDIT_PROMPT.md` | rotina de edição (legenda, abertura, whoosh, ritmo) |
+| `pipeline/ANALYZE_PROMPT.md` | rotina de análise e dicas de roteiro |
+| `pipeline/sfx/` | efeitos sonoros (whoosh, hit, pop) |
+| `pipeline/normalize.sh` | export final 1080x1920, 30fps, -14 LUFS |
+| `pipeline/upload.mts` · `report.mts` | falam com a Vercel sem expor segredo |
+| `src/lib/scheduler.ts` | quando e o que postar, métricas, renovação de token |
+| `src/app/api/*` | `ingest`, `report`, `cron/tick` |
+| `.github/workflows/tick.yml` | chama o tick de hora em hora |
