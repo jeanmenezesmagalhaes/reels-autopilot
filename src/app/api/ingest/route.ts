@@ -5,10 +5,17 @@ import { hasBearer } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-// Only accept videos stored in our own Vercel Blob store.
-const blobUrl = z
-  .url()
-  .refine((u) => new URL(u).hostname.endsWith(".public.blob.vercel-storage.com"), "must be a Vercel Blob URL");
+// Only accept videos stored in this project's own Blob store.
+// Token format: vercel_blob_rw_<storeId>_<secret>; public host is <storeid>.public.blob.vercel-storage.com
+function ownBlobHost() {
+  const storeId = process.env.BLOB_READ_WRITE_TOKEN?.split("_")[3];
+  return storeId ? `${storeId.toLowerCase()}.public.blob.vercel-storage.com` : undefined;
+}
+
+const blobUrl = z.url().refine((u) => {
+  const url = new URL(u);
+  return url.protocol === "https:" && url.hostname === ownBlobHost();
+}, "must be a URL from this project's Blob store");
 
 const body = z.object({
   slug: z.string().regex(/^[a-z0-9-]+$/),

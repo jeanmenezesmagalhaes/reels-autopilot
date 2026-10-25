@@ -34,5 +34,9 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "overrides": {
+    "zod": "$zod",
+    "postcss": "^8.5.31"
   }
 }
