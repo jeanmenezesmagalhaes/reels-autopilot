@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { db, getSetting, schema, setSetting } from "@/db";
+import { clearIgAccount } from "@/lib/instagram-account";
 import { tick } from "@/lib/scheduler";
 
 export async function togglePause() {
@@ -67,5 +68,11 @@ export async function setPreference(kind: "lang" | "theme", value: string) {
     maxAge: 60 * 60 * 24 * 365,
     path: "/",
   });
+  revalidatePath("/");
+}
+
+// Forget the connected Instagram account (token included). Reconnect from the dashboard.
+export async function disconnectInstagram() {
+  await clearIgAccount();
   revalidatePath("/");
 }

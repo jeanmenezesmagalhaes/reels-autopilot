@@ -6,7 +6,7 @@ import { getDictionary, LOCALES, dictionaries } from "@/i18n";
 import { when } from "@/lib/format";
 import { cookies } from "next/headers";
 import { estimateNextPostAt, pickNext } from "@/lib/scheduler";
-import { postNextNow, setPreference, togglePause } from "./actions";
+import { disconnectInstagram, postNextNow, setPreference, togglePause } from "./actions";
 import { Board } from "./board";
 import { logout } from "./login/actions";
 import { PERIODS, Results, type Period } from "./results";
@@ -14,7 +14,7 @@ import { PERIODS, Results, type Period } from "./results";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type SearchParams = Promise<{ view?: string; periodo?: string }>;
+type SearchParams = Promise<{ view?: string; periodo?: string; ig?: string }>;
 
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
@@ -23,7 +23,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const { locale, t } = await getDictionary();
   const theme = (await cookies()).get("theme")?.value ?? "system";
   const h = t.header;
-  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince, storedToken] = await Promise.all([
+  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince, storedToken, igUserId, igUsername] = await Promise.all([
     db().select().from(schema.videos).orderBy(desc(schema.videos.createdAt)),
     db().select().from(schema.variants),
     db().select().from(schema.ideas).where(eq(schema.ideas.status, "planned")).orderBy(desc(schema.ideas.createdAt)),
@@ -33,6 +33,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     estimateNextPostAt(),
     getSetting("ig_token_failing_since"),
     getSetting("ig_access_token"),
+    getSetting("ig_user_id"),
+    getSetting("ig_username"),
   ]);
   const tokenAlert = Number(tokenFailingSince) > 0 && Date.now() - Number(tokenFailingSince) > 3 * 86_400_000;
   const isPaused = paused === "true";
@@ -43,7 +45,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   // The hero answers "what happens next?" in priority order: publishing now, nothing
   // queued, Instagram not connected, paused, or the next post time. Pause/resume and
   // "post now" only appear when there is something they would act on.
-  const igReady = Boolean(process.env.IG_USER_ID && (process.env.IG_ACCESS_TOKEN || storedToken));
+  const igReady = Boolean(storedToken && igUserId);
   const waiting = variants.filter((v) => v.status === "queued").length;
   const hasQueue = waiting > 0 || Boolean(publishing);
   let bigTime: string;
@@ -80,7 +82,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     detail = next ? h.next(next.label, w ? w.day : undefined) : h.waiting(waiting);
   }
   const canControl = igReady && waiting > 0 && !publishing;
-  const navStatus = !igReady ? h.igMissingShort : isPaused ? h.paused : h.running(postsPerDay);
+  const navStatus = !igReady ? h.igMissingShort : `@${igUsername} · ${isPaused ? h.paused : h.running(postsPerDay)}`;
 
   return (
     <>
@@ -89,7 +91,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <h1 className="text-[17px] font-semibold tracking-tight">Reels Autopilot</h1>
           <div className="flex items-center gap-5">
             <p className="hidden text-sm text-ink-muted sm:block">{navStatus}</p>
-            <Settings locale={locale} theme={theme} />
+            <Settings locale={locale} theme={theme} igConnected={igReady} />
           </div>
         </div>
       </header>
@@ -108,8 +110,18 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               <p className="text-2xl font-semibold tracking-tight text-balance">{headline}</p>
               <p className="mt-1 text-[15px] text-ink-muted">{detail}</p>
               {note && <p className="mt-1 text-[15px] text-busy">{note}</p>}
+              {params.ig === "ok" && igReady && <p className="mt-1 text-[15px] text-ok">{h.igOk}</p>}
+              {params.ig === "erro" && <p className="mt-1 text-[15px] text-bad">{h.igError}</p>}
             </div>
           </div>
+          {!igReady && (
+            <a
+              href="/api/instagram/connect"
+              className="rounded-full bg-ink px-5 py-2 text-[15px] font-medium text-ground transition-[opacity,transform] duration-150 hover:opacity-85 active:scale-[0.97]"
+            >
+              {h.connectIg}
+            </a>
+          )}
           {canControl && (
             <div className="flex gap-2.5">
               <form action={togglePause}>
@@ -158,7 +170,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 const THEMES = ["system", "light", "dark"] as const;
 
 // Language and theme: two segmented controls behind one disclosure, no settings page.
-function Settings({ locale, theme }: { locale: keyof typeof dictionaries; theme: string }) {
+function Settings({ locale, theme, igConnected }: { locale: keyof typeof dictionaries; theme: string; igConnected: boolean }) {
   const t = dictionaries[locale];
   const current = (THEMES as readonly string[]).includes(theme) ? (theme as (typeof THEMES)[number]) : "system";
   const group = "flex rounded-full bg-ground-raised p-1";
@@ -191,6 +203,13 @@ function Settings({ locale, theme }: { locale: keyof typeof dictionaries; theme:
             </form>
           ))}
         </div>
+        {igConnected && (
+          <form action={disconnectInstagram}>
+            <button type="submit" className="w-full cursor-pointer rounded-full px-3 py-1.5 text-left text-sm font-medium text-ink-muted hover:bg-ground-raised hover:text-ink">
+              {t.header.disconnectIg}
+            </button>
+          </form>
+        )}
         <form action={logout}>
           <button type="submit" className="w-full cursor-pointer rounded-full px-3 py-1.5 text-left text-sm font-medium text-ink-muted hover:bg-ground-raised hover:text-ink">
             {t.login.logout}

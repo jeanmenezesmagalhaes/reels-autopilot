@@ -93,3 +93,43 @@ export function refreshLongLivedToken(token: string) {
     tokenInQuery: true,
   });
 }
+
+// "Conectar Instagram" (Instagram API with Instagram Login): code → short-lived → long-lived token.
+export const IG_SCOPES = ["instagram_business_basic", "instagram_business_content_publish", "instagram_business_manage_insights"];
+
+export function igAuthorizeUrl(redirectUri: string, state: string) {
+  const url = new URL("https://www.instagram.com/oauth/authorize");
+  url.search = new URLSearchParams({
+    client_id: process.env.IG_APP_ID!,
+    redirect_uri: redirectUri,
+    response_type: "code",
+    scope: IG_SCOPES.join(","),
+    state,
+  }).toString();
+  return url;
+}
+
+export async function igExchangeCode(code: string, redirectUri: string) {
+  const res = await fetch("https://api.instagram.com/oauth/access_token", {
+    method: "POST",
+    body: new URLSearchParams({
+      client_id: process.env.IG_APP_ID!,
+      client_secret: process.env.IG_APP_SECRET!,
+      grant_type: "authorization_code",
+      redirect_uri: redirectUri,
+      code,
+    }),
+    cache: "no-store",
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.access_token) throw new InstagramError("code exchange failed", res.status, json.error_type ?? "");
+  const short = json.access_token as string;
+  const long = await call<{ access_token: string }>(short, "https://graph.instagram.com/access_token", {
+    params: { grant_type: "ig_exchange_token", client_secret: process.env.IG_APP_SECRET! },
+    tokenInQuery: true,
+  });
+  const me = await call<{ user_id?: string; id?: string; username?: string }>(long.access_token, "/me", {
+    params: { fields: "user_id,username" },
+  });
+  return { token: long.access_token, userId: String(me.user_id ?? json.user_id), username: me.username };
+}

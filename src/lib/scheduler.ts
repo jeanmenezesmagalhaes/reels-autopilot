@@ -2,6 +2,7 @@ import { del } from "@vercel/blob";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db, getSetting, schema, setSetting } from "@/db";
 import type { Variant } from "@/db/schema";
+import { getIgAccount, saveIgToken } from "./instagram-account";
 import {
   createTrialReelContainer,
   getContainerStatus,
@@ -25,23 +26,17 @@ const METRICS_STALE_MS = 6 * 60 * 60 * 1000;
 export type TickResult = { log: string[] };
 
 function config() {
-  const userId = process.env.IG_USER_ID;
-  if (!userId) throw new Error("IG_USER_ID is not set");
   const postsPerDay = Math.max(1, Number(process.env.POSTS_PER_DAY ?? 2));
   const graduation = (process.env.IG_GRADUATION_STRATEGY ?? "MANUAL") as GraduationStrategy;
-  return { userId, postsPerDay, graduation };
+  return { postsPerDay, graduation };
 }
 
-async function getToken(log: string[]) {
-  const stored = await getSetting("ig_access_token");
-  const token = stored ?? process.env.IG_ACCESS_TOKEN;
-  if (!token) throw new Error("No Instagram token: set IG_ACCESS_TOKEN");
-
+async function getToken(token: string, log: string[]) {
   const refreshedAt = Number((await getSetting("ig_token_refreshed_at")) ?? 0);
   if (Date.now() - refreshedAt < TOKEN_REFRESH_EVERY_MS) return token;
   try {
     const fresh = await refreshLongLivedToken(token);
-    await setSetting("ig_access_token", fresh.access_token);
+    await saveIgToken(fresh.access_token);
     await setSetting("ig_token_refreshed_at", String(Date.now()));
     await setSetting("ig_token_failing_since", "");
     log.push("token refreshed");
@@ -254,8 +249,14 @@ async function runTick({ force = false, deadlineMs = 240_000 } = {}): Promise<Ti
     return { log };
   }
 
-  const { userId, postsPerDay, graduation } = config();
-  const token = await getToken(log);
+  const { postsPerDay, graduation } = config();
+  const account = await getIgAccount();
+  if (!account) {
+    log.push("instagram not connected");
+    return { log };
+  }
+  const { userId } = account;
+  const token = await getToken(account.token, log);
 
   try {
     await postNext({ token, userId, postsPerDay, graduation, force, deadline, log });
