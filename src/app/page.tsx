@@ -23,7 +23,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const { locale, t } = await getDictionary();
   const theme = (await cookies()).get("theme")?.value ?? "system";
   const h = t.header;
-  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince] = await Promise.all([
+  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince, storedToken] = await Promise.all([
     db().select().from(schema.videos).orderBy(desc(schema.videos.createdAt)),
     db().select().from(schema.variants),
     db().select().from(schema.ideas).where(eq(schema.ideas.status, "planned")).orderBy(desc(schema.ideas.createdAt)),
@@ -32,6 +32,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     pickNext(),
     estimateNextPostAt(),
     getSetting("ig_token_failing_since"),
+    getSetting("ig_access_token"),
   ]);
   const tokenAlert = Number(tokenFailingSince) > 0 && Date.now() - Number(tokenFailingSince) > 3 * 86_400_000;
   const isPaused = paused === "true";
@@ -39,33 +40,47 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const nextVideo = next && videos.find((v) => v.id === next.videoId);
   const postsPerDay = Number(process.env.POSTS_PER_DAY ?? 2);
 
-  // The hero figure is the next post time, or a state word in its system colour.
+  // The hero answers "what happens next?" in priority order: publishing now, nothing
+  // queued, Instagram not connected, paused, or the next post time. Pause/resume and
+  // "post now" only appear when there is something they would act on.
+  const igReady = Boolean(process.env.IG_USER_ID && (process.env.IG_ACCESS_TOKEN || storedToken));
+  const waiting = variants.filter((v) => v.status === "queued").length;
+  const hasQueue = waiting > 0 || Boolean(publishing);
   let bigTime: string;
   let bigTone = "text-ink";
   let headline: string;
   let detail: string;
-  const waiting = variants.filter((v) => v.status === "queued").length;
-  if (isPaused) {
-    bigTime = h.pausedWord;
-    bigTone = "text-busy";
-    headline = nextVideo ? nextVideo.title : h.emptyHeadline;
-    detail = waiting ? h.waiting(waiting) : h.dropHint;
-  } else if (publishing) {
+  let note: string | undefined;
+  if (publishing) {
     bigTime = h.now;
     bigTone = "text-ok";
     headline = videos.find((v) => v.id === publishing.videoId)?.title ?? "";
     detail = h.publishing(publishing.label);
-  } else if (next && nextVideo) {
-    const w = nextAt && when(t, nextAt);
-    bigTime = w ? w.time : "—";
-    headline = nextVideo.title;
-    detail = h.next(next.label, w ? w.day : undefined);
-  } else {
+  } else if (!hasQueue) {
     bigTime = h.emptyWord;
     bigTone = "text-ink-muted";
     headline = h.emptyHeadline;
     detail = h.dropHint;
+    if (!igReady) note = h.igMissing;
+  } else if (!igReady) {
+    bigTime = h.waitingWord;
+    bigTone = "text-busy";
+    headline = nextVideo?.title ?? h.waiting(waiting);
+    detail = h.waiting(waiting);
+    note = h.igMissing;
+  } else if (isPaused) {
+    bigTime = h.pausedWord;
+    bigTone = "text-busy";
+    headline = nextVideo?.title ?? h.waiting(waiting);
+    detail = h.waiting(waiting);
+  } else {
+    const w = nextAt && when(t, nextAt);
+    bigTime = w ? w.time : "—";
+    headline = nextVideo?.title ?? "";
+    detail = next ? h.next(next.label, w ? w.day : undefined) : h.waiting(waiting);
   }
+  const canControl = igReady && waiting > 0 && !publishing;
+  const navStatus = !igReady ? h.igMissingShort : isPaused ? h.paused : h.running(postsPerDay);
 
   return (
     <>
@@ -73,7 +88,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
         <div className="mx-auto flex h-12 max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-8">
           <h1 className="text-[17px] font-semibold tracking-tight">Reels Autopilot</h1>
           <div className="flex items-center gap-5">
-            {!isPaused && <p className="hidden text-sm text-ink-muted sm:block">{h.running(postsPerDay)}</p>}
+            <p className="hidden text-sm text-ink-muted sm:block">{navStatus}</p>
             <Settings locale={locale} theme={theme} />
           </div>
         </div>
@@ -92,22 +107,25 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             <div className="min-w-0 pb-1">
               <p className="text-2xl font-semibold tracking-tight text-balance">{headline}</p>
               <p className="mt-1 text-[15px] text-ink-muted">{detail}</p>
+              {note && <p className="mt-1 text-[15px] text-busy">{note}</p>}
             </div>
           </div>
-          <div className="flex gap-2.5">
-            <form action={togglePause}>
-              <SubmitButton pending={isPaused ? h.resuming : h.pausing} variant={isPaused ? "primary" : "quiet"}>
-                {isPaused ? h.resume : h.pause}
-              </SubmitButton>
-            </form>
-            {!isPaused && next && !publishing && (
-              <form action={postNextNow}>
-                <SubmitButton pending={h.posting} variant="primary">
-                  {h.postNow}
+          {canControl && (
+            <div className="flex gap-2.5">
+              <form action={togglePause}>
+                <SubmitButton pending={isPaused ? h.resuming : h.pausing} variant={isPaused ? "primary" : "quiet"}>
+                  {isPaused ? h.resume : h.pause}
                 </SubmitButton>
               </form>
-            )}
-          </div>
+              {!isPaused && (
+                <form action={postNextNow}>
+                  <SubmitButton pending={h.posting} variant="primary">
+                    {h.postNow}
+                  </SubmitButton>
+                </form>
+              )}
+            </div>
+          )}
         </div>
       </section>
 
