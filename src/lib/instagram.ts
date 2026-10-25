@@ -85,6 +85,78 @@ export async function getReelInsights(token: string, mediaId: string): Promise<I
   return Object.fromEntries(res.data.map((m) => [m.name, m.total_value?.value ?? m.values?.[0]?.value ?? 0]));
 }
 
+export type IgProfile = {
+  username: string;
+  name?: string;
+  biography?: string;
+  website?: string;
+  profile_picture_url?: string;
+  followers_count: number;
+  follows_count: number;
+  media_count: number;
+};
+
+export function getProfile(token: string) {
+  return call<IgProfile>(token, "/me", {
+    params: { fields: "username,name,biography,website,profile_picture_url,followers_count,follows_count,media_count" },
+  });
+}
+
+const ACCOUNT_METRICS = ["views", "reach", "accounts_engaged", "likes", "comments", "shares", "saves"] as const;
+export type AccountInsights = Partial<Record<(typeof ACCOUNT_METRICS)[number], number>> & { follows?: number; unfollows?: number };
+
+type TotalValue = { value?: number; breakdowns?: { results?: { dimension_values: string[]; value: number }[] }[] };
+
+// Account totals over a window (Meta keeps 2 years). Breakdowns can't be mixed with
+// plain totals, so `follows_and_unfollows` is its own request, split by follow_type:
+// FOLLOWER = accounts that followed, NON_FOLLOWER = accounts that left.
+export async function getAccountInsights(token: string, userId: string, since: Date, until: Date): Promise<AccountInsights> {
+  const window = {
+    period: "day",
+    metric_type: "total_value",
+    since: String(Math.floor(since.getTime() / 1000)),
+    until: String(Math.floor(until.getTime() / 1000)),
+  };
+  type Res = { data: { name: string; total_value?: TotalValue }[] };
+  const [totals, follows] = await Promise.all([
+    call<Res>(token, `/${userId}/insights`, { params: { ...window, metric: ACCOUNT_METRICS.join(",") } }),
+    call<Res>(token, `/${userId}/insights`, { params: { ...window, metric: "follows_and_unfollows", breakdown: "follow_type" } }),
+  ]);
+  const out: AccountInsights = Object.fromEntries(totals.data.map((m) => [m.name, m.total_value?.value ?? 0]));
+  const rows = follows.data[0]?.total_value?.breakdowns?.[0]?.results ?? [];
+  const of = (k: string) => rows.find((r) => r.dimension_values[0] === k)?.value ?? 0;
+  return { ...out, follows: of("FOLLOWER"), unfollows: of("NON_FOLLOWER") };
+}
+
+export type IgMedia = {
+  id: string;
+  media_type: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM";
+  media_product_type?: "FEED" | "REELS" | "STORY" | "AD";
+  media_url?: string;
+  thumbnail_url?: string;
+  permalink: string;
+  timestamp: string;
+  like_count?: number;
+  comments_count?: number;
+};
+
+// Newest first, paging until a post older than `since` shows up (or `max` is reached).
+export async function listMedia(token: string, since: Date, max: number) {
+  const out: IgMedia[] = [];
+  let next: string | undefined = "/me/media";
+  while (next && out.length < max) {
+    const page: { data: IgMedia[]; paging?: { next?: string } } = await call(token, next, {
+      params: next.startsWith("http")
+        ? {}
+        : { fields: "id,media_type,media_product_type,media_url,thumbnail_url,permalink,timestamp,like_count,comments_count", limit: "50" },
+    });
+    out.push(...page.data);
+    const last = page.data.at(-1);
+    next = last && new Date(last.timestamp) >= since ? page.paging?.next : undefined;
+  }
+  return out;
+}
+
 // Long-lived tokens last 60 days; refreshing resets the clock (token must be >24h old).
 export function refreshLongLivedToken(token: string) {
   return call<{ access_token: string; expires_in: number }>(token, "https://graph.instagram.com/refresh_access_token", {

@@ -103,6 +103,23 @@ export const variants = pgTable("variants", {
   (t) => [uniqueIndex("variants_video_label").on(t.videoId, t.label)],
 );
 
+// One row per Instagram account per day (creator's timezone), written by the cron tick
+// and by opening Perfil. The API only knows today's totals, so growth over a period
+// comes from these rows.
+export const profileSnapshots = pgTable(
+  "profile_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    igUserId: text("ig_user_id").notNull(),
+    day: text("day").notNull(), // YYYY-MM-DD
+    followers: integer("followers").notNull(),
+    follows: integer("follows").notNull(),
+    media: integer("media").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("profile_snapshots_user_day").on(t.igUserId, t.day)],
+);
+
 // Key/value store: ig_access_token, ig_token_refreshed_at, paused, learnings
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),

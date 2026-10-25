@@ -105,9 +105,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <h1 className="text-[17px] font-semibold tracking-tight">Reels Autopilot</h1>
           <div className="flex items-center gap-5">
             <p className="hidden text-sm text-ink-muted sm:block">{navStatus}</p>
-            <a href="/ajustes" className="rounded-full px-3 py-1 text-sm font-medium text-ink hover:bg-ground-raised">
-              {t.settings.link}
-            </a>
+            <div className="flex items-center">
+              <a href="/perfil" className="rounded-full px-3 py-1 text-sm font-medium text-ink hover:bg-ground-raised">
+                {t.profile.link}
+              </a>
+              <a href="/ajustes" className="rounded-full px-3 py-1 text-sm font-medium text-ink hover:bg-ground-raised">
+                {t.settings.link}
+              </a>
+            </div>
           </div>
         </div>
       </header>

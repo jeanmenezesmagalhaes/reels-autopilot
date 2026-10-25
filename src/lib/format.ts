@@ -2,13 +2,13 @@ import type { Variant } from "@/db/schema";
 import type { Dictionary } from "@/i18n/dictionaries";
 
 // Posting hours and the dashboard's clock follow the creator's timezone.
-const TZ = "America/Sao_Paulo";
+export const TZ = "America/Sao_Paulo";
 
 export function formatNumber(t: Dictionary, n: number) {
   return new Intl.NumberFormat(t.intl).format(n);
 }
 
-function dayKey(d: Date) {
+export function dayKey(d: Date) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(d);
 }
 

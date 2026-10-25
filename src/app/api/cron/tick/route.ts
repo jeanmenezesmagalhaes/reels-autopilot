@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hasBearer } from "@/lib/auth";
+import { snapshotProfiles } from "@/lib/profile";
 import { tick } from "@/lib/scheduler";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
-    return NextResponse.json(await tick());
+    const result = await tick();
+    // Daily follower count per account, so Perfil can show growth beyond what the API keeps.
+    await snapshotProfiles(result.log);
+    return NextResponse.json(result);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });
