@@ -49,7 +49,13 @@ export async function GET(req: Request) {
 const body = z.union([
   z.object({ learnings: z.string().min(1).max(20_000) }),
   z.object({
-    heartbeat: z.object({ provider: z.enum(["claude", "codex", "none"]), task: z.enum(["edit", "analyze", "ping"]), ok: z.boolean() }),
+    heartbeat: z.object({
+      provider: z.enum(["claude", "codex", "none"]),
+      task: z.enum(["edit", "analyze", "ping"]),
+      ok: z.boolean(),
+      // Every AI subscription logged in on the creator's Mac.
+      connected: z.array(z.enum(["claude", "codex"])).max(2).default([]),
+    }),
   }),
 ]);
 

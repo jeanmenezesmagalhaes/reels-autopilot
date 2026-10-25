@@ -102,8 +102,12 @@ if (await ask("  Editar sozinho de hora em hora e analisar todo dia às 05:30?")
   console.log(`  ✓ Agendado. Logs em ${logs}`);
 }
 
-// 5. Tell the dashboard which AI is connected
-console.log("\n5. Avisando o painel…");
+// 5. Helper for the "Conectar meu Claude/ChatGPT" buttons in Ajustes
+console.log("\n5. Assistente do Mac (botões de conectar em Ajustes)");
+run("npm", ["run", "-s", "setup:helper"]);
+
+// 6. Tell the dashboard which AI is connected
+console.log("\n6. Avisando o painel…");
 run("npm", ["run", "-s", "pipeline:run", "--", "ping"]);
 console.log("\nPronto. O painel mostra qual IA está conectada.\n");
 rl.close();

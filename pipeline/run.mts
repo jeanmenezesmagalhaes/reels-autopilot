@@ -29,13 +29,14 @@ const providers: Record<string, { cmd: string; args: string[] }> = {
 
 // Usage-limit and auth failures mean "try the next provider"; anything else is a real error.
 const SWITCH = /usage limit|rate limit|quota|limit reached|credit balance|not logged in|please run .*login|ENOENT/i;
+let connectedList: string[] = [];
 async function heartbeat(provider: string, ok: boolean) {
   const { APP_URL, PIPELINE_SECRET } = process.env;
   if (!APP_URL || !PIPELINE_SECRET) return;
   await fetch(new URL("/api/report", APP_URL), {
     method: "POST",
     headers: { authorization: `Bearer ${PIPELINE_SECRET}`, "content-type": "application/json" },
-    body: JSON.stringify({ heartbeat: { provider, task, ok } }),
+    body: JSON.stringify({ heartbeat: { provider, task, ok, connected: connectedList } }),
   }).catch(() => undefined);
 }
 
@@ -74,6 +75,8 @@ function nothingToEdit() {
   const has = (dir: string, re: RegExp) => existsSync(join(root, dir)) && readdirSync(join(root, dir)).some((f) => re.test(f));
   return !has("01-cru", /\.(mov|mp4|m4v)$/i) && !has("02-editando", /^[^.]/);
 }
+
+connectedList = order;
 
 if (task === "ping" || (task === "edit" && nothingToEdit())) {
   await heartbeat(order[0] ?? "none", order.length > 0);

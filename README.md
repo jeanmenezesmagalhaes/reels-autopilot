@@ -21,10 +21,11 @@ Plano e arquitetura: [PLAN.md](PLAN.md). Produto: [PRODUCT.md](PRODUCT.md).
 
 Tudo que a pessoa conecta fica em **Ajustes**, com status de cada conexão:
 - **Instagram:** uma ou várias contas; escolhe em qual publicar; reconectar/desconectar.
-- **IA:** "Entrar com OpenRouter" (um login, várias IAs) ou colar chave de API do Claude, ChatGPT ou Gemini.
-  A chave é testada na hora e guardada criptografada. Ordem de uso com reserva automática.
-  Com uma IA conectada aqui, a análise diária roda no servidor.
-- **Edição no computador:** mostra se o editor do Mac está ligado e com qual IA.
+- **IA:** "Conectar meu Claude" e "Conectar meu ChatGPT" usam a **assinatura que a pessoa já paga**
+  (Claude Pro/Max, ChatGPT Plus/Pro), sem custo extra: o botão abre o login oficial no Mac dela, pelo
+  assistente instalado uma vez (`npm run setup`, ou só `npm run setup:helper`). Status de cada uma.
+  Em "Avançado", chave de API (cobra por uso), testada na hora e guardada criptografada; com uma chave,
+  a análise diária também roda no servidor.
 - **Conta:** idioma, tema, sair.
 
 No primeiro acesso aparecem **exemplos** (só visuais, nunca publicados) e o **Comece por aqui** com 4 passos.

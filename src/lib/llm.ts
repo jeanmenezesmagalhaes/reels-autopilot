@@ -12,7 +12,6 @@ export const LLM_PROVIDERS = {
   anthropic: { name: "Claude", keyPrefix: "sk-ant-", keyUrl: "https://console.anthropic.com/settings/keys" },
   openai: { name: "ChatGPT", keyPrefix: "sk-", keyUrl: "https://platform.openai.com/api-keys" },
   google: { name: "Gemini", keyPrefix: "AI", keyUrl: "https://aistudio.google.com/apikey" },
-  openrouter: { name: "OpenRouter", keyPrefix: "sk-or-", keyUrl: "https://openrouter.ai/keys" },
 } as const;
 export type LlmProvider = keyof typeof LLM_PROVIDERS;
 export const isLlmProvider = (p: string): p is LlmProvider => p in LLM_PROVIDERS;
@@ -22,7 +21,6 @@ const MODELS = {
   anthropic: process.env.ANTHROPIC_MODEL ?? "claude-opus-5-5",
   openai: process.env.OPENAI_MODEL ?? "gpt-5",
   google: process.env.GEMINI_MODEL ?? "gemini-2.5-pro",
-  openrouter: process.env.OPENROUTER_MODEL ?? "openrouter/auto",
 };
 
 async function ok(res: Response, provider: string) {
@@ -45,9 +43,6 @@ export async function validateKey(provider: LlmProvider, key: string) {
         provider,
       );
       return;
-    case "openrouter":
-      await ok(await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${key}` } }), provider);
-      return;
   }
 }
 
@@ -68,12 +63,9 @@ async function callProvider(provider: LlmProvider, key: string, system: string, 
       if (res.stop_reason === "refusal") throw new Error("anthropic refusal");
       return res.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("");
     }
-    case "openai":
-    case "openrouter": {
-      const url =
-        provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions";
+    case "openai": {
       const json = await ok(
-        await fetch(url, {
+        await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
           headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
           body: JSON.stringify({
@@ -137,13 +129,13 @@ export async function complete(system: string, prompt: string) {
   throw new Error(`all AIs failed: ${errors.join("; ")}`);
 }
 
-export async function saveLlmKey(provider: LlmProvider, key: string, method: "api_key" | "oauth" = "api_key") {
+export async function saveLlmKey(provider: LlmProvider, key: string) {
   const rows = await listLlmConnections();
   const existing = rows.find((r) => r.provider === provider);
   const values = {
     kind: "llm",
     provider,
-    method,
+    method: "api_key",
     label: `…${key.slice(-4)}`,
     externalId: provider,
     secret: encryptSecret(key),

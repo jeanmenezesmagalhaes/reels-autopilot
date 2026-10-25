@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { Chevron } from "@/components/chevron";
 import { SubmitButton } from "@/components/submit-button";
 import { dictionaries, getDictionary, LOCALES } from "@/i18n";
 import { LLM_PROVIDERS } from "@/lib/llm";
@@ -14,7 +15,7 @@ export const metadata: Metadata = { title: "Ajustes · Reels Autopilot" };
 export const dynamic = "force-dynamic";
 
 const THEMES = ["system", "light", "dark"] as const;
-type SearchParams = Promise<{ ig?: string; ia?: string }>;
+type SearchParams = Promise<{ ig?: string }>;
 
 // Everything a creator connects, in plain language: where videos are published
 // (Instagram), who edits and analyses them (AI), and the account itself.
@@ -25,7 +26,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
   const jar = await cookies();
   const theme = jar.get("theme")?.value ?? "system";
   const session = await readSession(jar.get(SESSION_COOKIE)?.value);
-  const { instagram, llms, runner } = await connectionStatus();
+  const { instagram, llms, subscriptions, lastSeen } = await connectionStatus();
   const ago = (ms: number) => new Intl.RelativeTimeFormat(t.intl, { numeric: "auto" }).format(-Math.round((Date.now() - ms) / 60000), "minute");
 
   return (
@@ -74,59 +75,78 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
       </Section>
 
       <Section id="ia" title={s.aiTitle} intro={s.aiIntro}>
-        {params.ia === "ok" && <Notice tone="ok">{s.orOk}</Notice>}
-        {params.ia === "erro" && <Notice tone="bad">{s.orBad}</Notice>}
-        {llms.length === 0 ? (
-          <p className="text-[15px] text-ink-muted">{s.aiEmpty}</p>
-        ) : (
-          <ul className="divide-y divide-rule rounded-2xl bg-ground-raised">
-            {llms.map((c, i) => (
-              <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+        <div>
+          <p className="font-semibold">{s.subTitle}</p>
+          <p className="mt-1 max-w-prose text-[15px] text-ink-muted">{s.subBody}</p>
+        </div>
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {(["claude", "codex"] as const).map((ai) => {
+            const on = subscriptions.has(ai);
+            const name = aiLabel(ai);
+            return (
+              <li key={ai} className="flex flex-col gap-3 rounded-2xl bg-ground-raised p-4">
                 <div>
-                  <p className="font-semibold">
-                    {aiLabel(c.provider)} <span className="font-normal text-ink-muted">{c.label}</span>
-                  </p>
-                  <p className="text-sm text-ink-muted">
-                    {s.order(i + 1)} · <StatusText ok={c.status === "ok"} copy={s} />
+                  <p className="font-semibold">{s.plans[ai]}</p>
+                  <p className={`text-sm ${on ? "text-ok" : "text-ink-muted"}`}>
+                    {on && lastSeen ? s.connectedMine(ago(lastSeen)) : s.notConnected}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  {i > 0 && (
-                    <form action={moveLlmConnection.bind(null, c.id, "up")}>
-                      <SubmitButton pending="…" variant="card">
-                        {s.up}
-                      </SubmitButton>
-                    </form>
-                  )}
-                  {i < llms.length - 1 && (
-                    <form action={moveLlmConnection.bind(null, c.id, "down")}>
-                      <SubmitButton pending="…" variant="card">
-                        {s.down}
-                      </SubmitButton>
-                    </form>
-                  )}
-                  <form action={removeLlmConnection.bind(null, c.id)}>
-                    <SubmitButton pending="…" variant="card">
-                      {s.remove}
-                    </SubmitButton>
-                  </form>
-                </div>
+                <a href={`reelsautopilot://connect/${ai === "codex" ? "chatgpt" : "claude"}`} className={on ? cardLink : primaryLink}>
+                  {on ? s.reconnect : s.connectMine(name)}
+                </a>
               </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="rounded-2xl border border-rule p-4">
-          <p className="font-semibold">{s.orTitle}</p>
-          <p className="mt-1 text-[15px] text-ink-muted">{s.orBody}</p>
-          <a href="/api/llm/openrouter/connect" className={`${primaryLink} mt-3`}>
-            {s.orConnect}
-          </a>
+            );
+          })}
+        </ul>
+        <div className="text-[15px] text-ink-muted">
+          <p>{s.helperFirst}</p>
+          <code className="my-2 block rounded-xl bg-ground-raised px-4 py-3 text-ink">npm run setup</code>
+          <p>{s.helperAfter}</p>
         </div>
 
-        <div className="rounded-2xl border border-rule p-4">
-          <p className="font-semibold">{s.keyTitle}</p>
-          <p className="mt-1 mb-3 text-[15px] text-ink-muted">{s.keyBody}</p>
+        <details className="group rounded-2xl border border-rule p-4">
+          <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden">
+            <Chevron />
+            {s.advanced}
+          </summary>
+          {llms.length > 0 && (
+            <ul className="mt-4 divide-y divide-rule rounded-2xl bg-ground-raised">
+              {llms.map((c, i) => (
+                <li key={c.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div>
+                    <p className="font-semibold">
+                      {aiLabel(c.provider)} <span className="font-normal text-ink-muted">{c.label}</span>
+                    </p>
+                    <p className="text-sm text-ink-muted">
+                      {s.order(i + 1)} · <StatusText ok={c.status === "ok"} copy={s} />
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {i > 0 && (
+                      <form action={moveLlmConnection.bind(null, c.id, "up")}>
+                        <SubmitButton pending="…" variant="card">
+                          {s.up}
+                        </SubmitButton>
+                      </form>
+                    )}
+                    {i < llms.length - 1 && (
+                      <form action={moveLlmConnection.bind(null, c.id, "down")}>
+                        <SubmitButton pending="…" variant="card">
+                          {s.down}
+                        </SubmitButton>
+                      </form>
+                    )}
+                    <form action={removeLlmConnection.bind(null, c.id)}>
+                      <SubmitButton pending="…" variant="card">
+                        {s.remove}
+                      </SubmitButton>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-4 mb-3 text-[15px] text-ink-muted">{s.keyBody}</p>
           <KeyForm
             copy={{ provider: s.keyProvider, placeholder: s.keyPlaceholder, add: s.keyAdd, adding: s.keyAdding, ok: s.keyOk, bad: s.keyBad }}
             options={(["anthropic", "openai", "google"] as const).map((id) => ({
@@ -136,19 +156,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
               where: s.keyWhere(LLM_PROVIDERS[id].name),
             }))}
           />
-        </div>
-      </Section>
-
-      <Section id="computador" title={s.macTitle} intro={s.macIntro}>
-        <p className={`text-[15px] font-medium ${runner ? "text-ok" : "text-ink-muted"}`}>
-          {runner ? s.macOn(aiLabel(runner.provider), ago(runner.at)) : s.macOff}
-        </p>
-        {!runner && (
-          <>
-            <p className="text-[15px] text-ink-muted">{s.macHow}</p>
-            <code className="block rounded-xl bg-ground-raised px-4 py-3 text-[15px]">npm run setup</code>
-          </>
-        )}
+        </details>
       </Section>
 
       <Section title={s.accountTitle}>
@@ -181,6 +189,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
 
 const primaryLink =
   "inline-flex w-fit rounded-full bg-ink px-5 py-2 text-[15px] font-medium text-ground transition-[opacity,transform] duration-150 hover:opacity-85 active:scale-[0.97]";
+// Secondary action sitting on a grey card: a white pill, as on the board cards.
+const cardLink =
+  "inline-flex w-fit rounded-full bg-ground px-5 py-2 text-[15px] font-medium text-ink transition-[background-color,transform] duration-150 hover:bg-rule active:scale-[0.97]";
 const secondaryLink =
   "inline-flex w-fit rounded-full bg-ground-raised px-5 py-2 text-[15px] font-medium text-ink transition-[background-color,transform] duration-150 hover:bg-rule active:scale-[0.97]";
 

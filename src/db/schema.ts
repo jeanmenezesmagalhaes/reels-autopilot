@@ -16,7 +16,7 @@ export const connections = pgTable(
   {
     id: serial("id").primaryKey(),
     kind: text("kind").notNull(), // "instagram" | "llm"
-    provider: text("provider").notNull(), // instagram | anthropic | openai | google | openrouter
+    provider: text("provider").notNull(), // instagram | anthropic | openai | google
     method: text("method").notNull(), // "oauth" | "api_key"
     label: text("label").notNull(), // "@username" or "…a1b2"
     externalId: text("external_id").notNull(), // Instagram user id, or the provider name for AI keys
