@@ -4,7 +4,6 @@
   /* Apple-like: white and black, one grey for secondary text, system colours for state. */
   --ground: #ffffff;
   --ground-raised: #f5f5f7;
-  --ground-band: #f5f5f7;
   --ink: #1d1d1f;
   --ink-muted: #6e6e73;
   --rule: #d2d2d7;
@@ -17,7 +16,6 @@
 :root[data-theme="dark"] {
   --ground: #000000;
   --ground-raised: #1c1c1e;
-  --ground-band: #1c1c1e;
   --ink: #f5f5f7;
   --ink-muted: #a1a1a6;
   --rule: #38383a;
@@ -31,8 +29,7 @@
   :root[data-theme="system"] {
     --ground: #000000;
     --ground-raised: #1c1c1e;
-    --ground-band: #1c1c1e;
-    --ink: #f5f5f7;
+      --ink: #f5f5f7;
     --ink-muted: #a1a1a6;
     --rule: #38383a;
     --ok: #30d158;
@@ -45,7 +42,6 @@
 @theme inline {
   --color-ground: var(--ground);
   --color-ground-raised: var(--ground-raised);
-  --color-ground-band: var(--ground-band);
   --color-ink: var(--ink);
   --color-ink-muted: var(--ink-muted);
   --color-rule: var(--rule);

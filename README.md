@@ -8,9 +8,18 @@ Plano e arquitetura: [PLAN.md](PLAN.md). Produto: [PRODUCT.md](PRODUCT.md).
 
 1. Larga o vídeo cru em `~/Movies/ReelsAutopilot/01-cru`.
 2. Pronto. A cada hora o Claude edita (tarefa "Reels Autopilot: editar vídeos novos") e manda para a fila.
-3. A fila posta entre 08h e 22h, `POSTS_PER_DAY` por dia, alternando vídeos.
-4. Todo dia 05:30 o Claude analisa os resultados e atualiza "o que está funcionando" no painel.
+3. A fila posta só como **Trial Reel**, entre 08h e 22h, `POSTS_PER_DAY` por dia, alternando vídeos.
+4. Todo dia 05:30 o Claude analisa os resultados, escreve "O que fazer a seguir" e sugere pautas.
 5. Painel: https://reels-autopilot-bay.vercel.app (usuário qualquer, senha `DASHBOARD_PASSWORD`).
+   - **Quadro:** Planejado → Em edição → Na fila → Publicado. Tu só adiciona pauta e marca quando gravou.
+   - **Resultados:** o que funcionou e o que não funcionou em 7, 30, 365 dias ou tudo.
+   - Idioma (pt/en/es, pelo navegador) e tema (sistema/claro/escuro) no canto de cima.
+
+### Sem o app do Claude aberto (opcional)
+
+`npm run pipeline:run -- edit` (ou `analyze`) roda a rotina pelo Claude Code; se o Claude bater limite
+ou não estiver logado, passa sozinho para o Codex (ChatGPT). Cada um usa o próprio login oficial
+(`claude` e `codex login`, abrem o navegador). Para agendar sem o app, use `launchd`/`cron` chamando esse comando.
 
 ## Checklist para ligar (uma vez)
 
@@ -59,6 +68,10 @@ Rodar no terminal, dentro de `~/code/reels-autopilot`. Cada comando pede o valor
 | `pipeline/sfx/` | efeitos sonoros (whoosh, hit, pop) |
 | `pipeline/normalize.sh` | export final 1080x1920, 30fps, -14 LUFS |
 | `pipeline/upload.mts` · `report.mts` | falam com a Vercel sem expor segredo |
+| `pipeline/run.mts` | roda as rotinas com Claude, e com ChatGPT se o Claude acabar |
 | `src/lib/scheduler.ts` | quando e o que postar, métricas, renovação de token |
-| `src/app/api/*` | `ingest`, `report`, `cron/tick` |
+| `src/app/api/*` | `ingest`, `report`, `ideas`, `cron/tick` |
+| `src/app/page.tsx` · `board.tsx` · `results.tsx` | painel: Quadro e Resultados |
+| `src/i18n/` | textos em pt, en, es |
+| `docs/PLANO-PRODUTO.md` | open source, Pro, Business, cobrança, MCP |
 | `.github/workflows/tick.yml` | chama o tick de hora em hora |

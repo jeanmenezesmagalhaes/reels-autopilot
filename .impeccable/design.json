@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-25T00:00:00Z",
+  "title": "Design System: Reels Autopilot",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ground-raised": {
+        "role": "neutral",
+        "displayName": "Grouped Grey",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ink": {
+        "role": "primary",
+        "displayName": "Sheet Ink",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Secondary Grey",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "off": {
+        "role": "neutral",
+        "displayName": "Off Grey",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ok": {
+        "role": "state",
+        "displayName": "System Green",
+        "tonalRamp": [
+          "#0b2e14",
+          "#124d22",
+          "#1b6b2f",
+          "#248a3d",
+          "#30d158",
+          "#6ee08a",
+          "#a8ecb9",
+          "#e3f8e9"
+        ]
+      },
+      "busy": {
+        "role": "state",
+        "displayName": "System Orange",
+        "tonalRamp": [
+          "#3a1a00",
+          "#5e2b00",
+          "#8a3e00",
+          "#b25000",
+          "#ff9f0a",
+          "#ffbd5c",
+          "#ffd89e",
+          "#fff2df"
+        ]
+      },
+      "bad": {
+        "role": "state",
+        "displayName": "System Red",
+        "tonalRamp": [
+          "#3d0006",
+          "#66000c",
+          "#a00011",
+          "#d70015",
+          "#ff453a",
+          "#ff7d75",
+          "#ffb1ac",
+          "#ffe5e3"
+        ]
+      },
+      "ground-dark": {
+        "role": "neutral",
+        "displayName": "Paper White (dark)",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ground-raised-dark": {
+        "role": "neutral",
+        "displayName": "Grouped Grey (dark)",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ink-dark": {
+        "role": "primary",
+        "displayName": "Sheet White (dark)",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ink-muted-dark": {
+        "role": "neutral",
+        "displayName": "Secondary Grey (dark)",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "rule-dark": {
+        "role": "neutral",
+        "displayName": "Hairline (dark)",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      },
+      "ok-dark": {
+        "role": "state",
+        "displayName": "System Green (dark)",
+        "tonalRamp": [
+          "#0b2e14",
+          "#124d22",
+          "#1b6b2f",
+          "#248a3d",
+          "#30d158",
+          "#6ee08a",
+          "#a8ecb9",
+          "#e3f8e9"
+        ]
+      },
+      "busy-dark": {
+        "role": "state",
+        "displayName": "System Orange (dark)",
+        "tonalRamp": [
+          "#3a1a00",
+          "#5e2b00",
+          "#8a3e00",
+          "#b25000",
+          "#ff9f0a",
+          "#ffbd5c",
+          "#ffd89e",
+          "#fff2df"
+        ]
+      },
+      "bad-dark": {
+        "role": "state",
+        "displayName": "System Red (dark)",
+        "tonalRamp": [
+          "#3d0006",
+          "#66000c",
+          "#a00011",
+          "#d70015",
+          "#ff453a",
+          "#ff7d75",
+          "#ffb1ac",
+          "#ffe5e3"
+        ]
+      },
+      "off-dark": {
+        "role": "neutral",
+        "displayName": "Off Grey (dark)",
+        "tonalRamp": [
+          "#1d1d1f",
+          "#2c2c2e",
+          "#3a3a3c",
+          "#48484a",
+          "#6e6e73",
+          "#a1a1a6",
+          "#d2d2d7",
+          "#f5f5f7"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Hero figure only (next post time or state word); 60px below sm."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Next video title beside the hero figure."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "App name, column and lane headings."
+      },
+      "body-large": {
+        "displayName": "Body Large",
+        "purpose": "Results prose and learnings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Cards, buttons, segmented controls, input."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "In-card pills, disclosures, status words, metric lines."
+      }
+    },
+    "shadows": [
+      {
+        "name": "segment-thumb",
+        "value": "0 1px 3px rgba(0,0,0,0.12)",
+        "purpose": "Active item of a segmented control."
+      },
+      {
+        "name": "popover",
+        "value": "0 10px 30px rgba(0,0,0,0.12)",
+        "purpose": "Floating settings panel, with a hairline border."
+      }
+    ],
+    "motion": [
+      {
+        "name": "press",
+        "value": "transform scale(0.97), 150ms",
+        "purpose": "Button press feedback."
+      },
+      {
+        "name": "state-transition",
+        "value": "color/background-color 150ms",
+        "purpose": "Button hover fills."
+      },
+      {
+        "name": "disclosure",
+        "value": "rotate(90deg), 200ms ease-out",
+        "purpose": "Chevron turning as a details element opens."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Black pill for the one main action of an area (Post now, Resume).",
+      "html": "<button class=\"ds-btn-primary\">Post now</button>",
+      "css": ".ds-btn-primary{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;background:var(--ink,#1d1d1f);color:var(--ground,#fff);border:0;border-radius:9999px;padding:8px 20px;font-size:15px;font-weight:500;cursor:pointer;transition:color .15s,background-color .15s,transform .15s,opacity .15s}.ds-btn-primary:hover{opacity:.85}.ds-btn-primary:active{transform:scale(.97)}.ds-btn-primary:focus-visible{outline:2px solid var(--ink,#1d1d1f);outline-offset:2px}.ds-btn-primary:disabled{opacity:.5;cursor:wait}"
+    },
+    {
+      "name": "Quiet Button",
+      "kind": "button",
+      "refersTo": "button-quiet",
+      "description": "Grey pill for secondary actions (Pause).",
+      "html": "<button class=\"ds-btn-quiet\">Pause</button>",
+      "css": ".ds-btn-quiet{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;background:var(--ground-raised,#f5f5f7);color:var(--ink,#1d1d1f);border:0;border-radius:9999px;padding:8px 20px;font-size:15px;font-weight:500;cursor:pointer;transition:background-color .15s,transform .15s}.ds-btn-quiet:hover{background:var(--rule,#d2d2d7)}.ds-btn-quiet:active{transform:scale(.97)}.ds-btn-quiet:focus-visible{outline:2px solid var(--ink,#1d1d1f);outline-offset:2px}"
+    },
+    {
+      "name": "In-card Button",
+      "kind": "button",
+      "refersTo": "button-card",
+      "description": "Small white pill for actions inside a grey card (Drop, Mark recorded, Skip, Retry).",
+      "html": "<div style=\"background:var(--ground-raised,#f5f5f7);padding:12px 16px;border-radius:16px;display:inline-flex;gap:8px\"><button class=\"ds-btn-card\">Drop</button><button class=\"ds-btn-card\">Mark recorded</button></div>",
+      "css": ".ds-btn-card{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;background:var(--ground,#fff);color:var(--ink,#1d1d1f);border:0;border-radius:9999px;padding:4px 12px;font-size:14px;font-weight:500;cursor:pointer;transition:background-color .15s,transform .15s}.ds-btn-card:hover{background:var(--rule,#d2d2d7)}.ds-btn-card:active{transform:scale(.97)}.ds-btn-card:focus-visible{outline:2px solid var(--ink,#1d1d1f);outline-offset:2px}"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "nav",
+      "refersTo": "segmented-track",
+      "description": "Pill track with a lifted white thumb; switches views, periods, language and theme.",
+      "html": "<nav class=\"ds-seg\"><a class=\"ds-seg-item\" aria-current=\"page\" href=\"#\">Board</a><a class=\"ds-seg-item\" href=\"#\">Results</a></nav>",
+      "css": ".ds-seg{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;display:inline-flex;background:var(--ground-raised,#f5f5f7);border-radius:9999px;padding:4px;font-size:15px;font-weight:500}.ds-seg-item{border-radius:9999px;padding:6px 16px;color:var(--ink-muted,#6e6e73);text-decoration:none}.ds-seg-item:hover{color:var(--ink,#1d1d1f)}.ds-seg-item[aria-current]{background:var(--ground,#fff);color:var(--ink,#1d1d1f);box-shadow:0 1px 3px rgba(0,0,0,.12)}.ds-seg-item:focus-visible{outline:2px solid var(--ink,#1d1d1f);outline-offset:2px}"
+    },
+    {
+      "name": "Idea Input",
+      "kind": "input",
+      "refersTo": "input-pill",
+      "description": "Pill text field with hairline stroke; stroke turns ink on focus.",
+      "html": "<input class=\"ds-input\" placeholder=\"New idea\" aria-label=\"New idea\">",
+      "css": ".ds-input{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;background:var(--ground,#fff);color:var(--ink,#1d1d1f);border:1px solid var(--rule,#d2d2d7);border-radius:9999px;padding:8px 16px;font-size:15px}.ds-input::placeholder{color:var(--ink-muted,#6e6e73)}.ds-input:focus{outline:none;border-color:var(--ink,#1d1d1f)}"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Grouped grey card, 16px radius, no border or shadow.",
+      "html": "<article class=\"ds-card\"><p class=\"ds-card-t\">TESTE do pipeline</p><p class=\"ds-card-d\">5 of 5 waiting</p></article>",
+      "css": ".ds-card{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;background:var(--ground-raised,#f5f5f7);color:var(--ink,#1d1d1f);border-radius:16px;padding:12px 16px;font-size:15px;max-width:260px}.ds-card-t{margin:0;font-weight:600}.ds-card-d{margin:4px 0 0;color:var(--ink-muted,#6e6e73)}"
+    },
+    {
+      "name": "Nav Bar",
+      "kind": "nav",
+      "refersTo": "nav-bar",
+      "description": "48px translucent sticky bar, hairline below, app name left and settings disclosure right.",
+      "html": "<header class=\"ds-nav\"><span class=\"ds-nav-name\">Reels Autopilot</span><span class=\"ds-nav-set\">English · System <svg viewBox=\"0 0 16 16\" width=\"14\" height=\"14\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\" style=\"transform:rotate(90deg)\"><path d=\"M6 3.5 10.5 8 6 12.5\"/></svg></span></header>",
+      "css": ".ds-nav{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 32px;background:color-mix(in srgb,var(--ground,#fff) 80%,transparent);backdrop-filter:blur(24px) saturate(1.5);border-bottom:1px solid var(--rule,#d2d2d7);color:var(--ink,#1d1d1f)}.ds-nav-name{font-size:17px;font-weight:600;letter-spacing:-.025em}.ds-nav-set{display:inline-flex;align-items:center;gap:6px;border-radius:9999px;padding:4px 12px;font-size:14px;color:var(--ink-muted,#6e6e73);cursor:pointer}.ds-nav-set:hover{background:var(--ground-raised,#f5f5f7);color:var(--ink,#1d1d1f)}"
+    },
+    {
+      "name": "Hero Figure",
+      "kind": "custom",
+      "refersTo": "display",
+      "description": "Next post time as the page's one display figure, or a state word in its system colour.",
+      "html": "<div class=\"ds-hero\"><p class=\"ds-hero-fig\">14:30</p><div><p class=\"ds-hero-h\">TESTE do pipeline</p><p class=\"ds-hero-d\">Version B, today</p></div></div>",
+      "css": ".ds-hero{font-family:-apple-system,BlinkMacSystemFont,\"SF Pro Text\",\"Helvetica Neue\",\"Segoe UI\",Roboto,sans-serif;display:flex;align-items:flex-end;gap:32px;color:var(--ink,#1d1d1f)}.ds-hero-fig{margin:0;font-size:72px;line-height:1;font-weight:600;letter-spacing:-.025em;font-variant-numeric:tabular-nums}.ds-hero-h{margin:0;font-size:24px;font-weight:600;letter-spacing:-.025em}.ds-hero-d{margin:4px 0 0;font-size:15px;color:var(--ink-muted,#6e6e73)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Calm White Sheet",
+    "overview": "Apple-like utility, pinned by the user: \"clean like Apple systems, white with black, simple readable buttons\". The page is a white sheet with black ink, one grey for everything secondary, and grey grouped surfaces that sit on it without borders or shadows. Colour is not decoration here; the Apple system greens, oranges and reds appear only when they are saying something about state.\n\nThe one loud thing is the hero figure: the next post time set very large in semibold tabular numerals, or, when there is no time to show, a state word in its system colour (Paused in orange, NOW in green while publishing, Empty in grey). Everything else steps back: 17px semibold titles, 15px body, 14px labels, all in the system font. Density is calm, not sparse: a single 1200px column with four Kanban lanes, read in one glance and closed.\n\nThe dark theme is the same sheet inverted: pure black ground, #1c1c1e grouped surfaces, Apple's dark-mode system colours. It is chosen per user (System, Light, Dark) via a `data-theme` attribute, and System follows `prefers-color-scheme`.",
+    "keyCharacteristics": [
+      "White (or pure black) ground, near-black ink, one muted grey.",
+      "Grouped grey cards at 16px radius, no border, no shadow.",
+      "Pill buttons and pill segmented controls; black is the primary, grey is the quiet one.",
+      "System colours on status words only.",
+      "Tabular numerals everywhere; the time is the hero.",
+      "Translucent sticky nav bar with the only structural hairline."
+    ],
+    "rules": [
+      {
+        "name": "The Status-Word Rule",
+        "body": "System colours colour words that name a state (status labels, the hero state word, lane titles, alerts). They never fill a surface, tint a card, or decorate a button.",
+        "section": "colors"
+      },
+      {
+        "name": "The Paired-Theme Rule",
+        "body": "Every colour is a CSS custom property with a light value on `:root` and a dark value under `[data-theme=\"dark\"]` and the System media query. Components use the role (`text-ink-muted`, `bg-ground-raised`), never a raw hex.",
+        "section": "colors"
+      },
+      {
+        "name": "The One-Hero Rule",
+        "body": "Only the hero figure uses Display. No other number on the page competes with it; per-post view counts stop at 18px semibold.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Numerals are tabular everywhere (`font-variant-numeric: tabular-nums` on body), carried over from the retired departures-board direction.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat Card Rule",
+        "body": "Cards have no border and no shadow. A grey surface on the sheet is enough.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep the sheet monochrome: Paper White, Grouped Grey, Sheet Ink, Secondary Grey; colour only the words that name a state.",
+      "Do make every pressable thing a pill and every content holder a 16px card.",
+      "Do use the black pill for the one main action of an area and the grey pill for the rest.",
+      "Do switch views and periods with a segmented control, never tabs with underlines.",
+      "Do bind every colour to its role token so light and dark stay paired.",
+      "Do keep numerals tabular and reserve Display for the hero figure."
+    ],
+    "donts": [
+      "Don't add borders or shadows to cards; depth is tonal. Shadows belong only to the segment thumb and floating popovers.",
+      "Don't use system colours as fills, tints or button colours.",
+      "Don't add KPI tiles, charts or decorative chrome; the brief refuses them.",
+      "Don't introduce a second typeface or a third radius."
+    ]
+  }
+}
