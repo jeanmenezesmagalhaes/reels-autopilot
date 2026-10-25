@@ -8,6 +8,17 @@ export const variantStatus = pgEnum("variant_status", [
   "skipped",
 ]);
 
+// People who signed in with Google. "owner" opens the dashboard; everyone else is on
+// the early-access waitlist until the multi-user version ships.
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  role: text("role").notNull().default("waitlist"), // "owner" | "waitlist"
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const ideaStatus = pgEnum("idea_status", ["planned", "recorded", "dropped"]);
 
 // Kanban "Planejado": recording ideas from Jean or suggested by the analysis routine.
@@ -70,3 +81,4 @@ export const settings = pgTable("settings", {
 export type Video = typeof videos.$inferSelect;
 export type Variant = typeof variants.$inferSelect;
 export type Idea = typeof ideas.$inferSelect;
+export type User = typeof users.$inferSelect;

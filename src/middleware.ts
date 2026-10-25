@@ -1,19 +1,20 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { isValidSession, SESSION_COOKIE } from "@/lib/session";
+import { readSession, SESSION_COOKIE } from "@/lib/session";
 
-// Session gate for the dashboard. API routes use their own bearer secrets.
+// Page gate. "/" is the owner's dashboard, "/espera" the waitlist screen, "/login"
+// is public. API routes are excluded here and check their own secrets.
 export async function middleware(req: NextRequest) {
-  const password = process.env.DASHBOARD_PASSWORD;
-  if (!password) return new NextResponse("DASHBOARD_PASSWORD not set", { status: 503 });
+  const session = await readSession(req.cookies.get(SESSION_COOKIE)?.value);
+  const path = req.nextUrl.pathname;
+  const home = session?.role === "owner" ? "/" : "/espera";
+  const to = (p: string) => NextResponse.redirect(new URL(p, req.url));
 
-  const signedIn = await isValidSession(req.cookies.get(SESSION_COOKIE)?.value, password);
-  const onLogin = req.nextUrl.pathname === "/login";
-
-  if (onLogin) return signedIn ? NextResponse.redirect(new URL("/", req.url)) : NextResponse.next();
-  if (signedIn) return NextResponse.next();
-  // Pages go to the login screen; anything else (server actions, fetches) is refused.
-  if (req.method === "GET") return NextResponse.redirect(new URL("/login", req.url));
-  return new NextResponse("Unauthorized", { status: 401 });
+  if (path === "/login") return session ? to(home) : NextResponse.next();
+  if (!session) return req.method === "GET" ? to("/login") : new NextResponse("Unauthorized", { status: 401 });
+  if (path === "/espera") return session.role === "waitlist" ? NextResponse.next() : to("/");
+  // Everything else belongs to the owner.
+  if (session.role !== "owner") return req.method === "GET" ? to("/espera") : new NextResponse("Forbidden", { status: 403 });
+  return NextResponse.next();
 }
 
 export const config = {
