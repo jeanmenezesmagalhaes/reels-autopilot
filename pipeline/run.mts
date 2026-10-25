@@ -19,12 +19,17 @@ const prompt =
     : `Follow these instructions exactly. Working directory: ${process.cwd()}.\n\n` +
       readFileSync(join(import.meta.dirname, prompts[task]), "utf8");
 
+// The ChatGPT desktop app ships its own Codex CLI (already signed in with ChatGPT);
+// use it when `codex` isn't on PATH.
+const BUNDLED_CODEX = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex";
+const codexCmd = spawnSync("which", ["codex"]).status === 0 ? "codex" : existsSync(BUNDLED_CODEX) ? BUNDLED_CODEX : "codex";
+
 const providers: Record<string, { cmd: string; args: string[] }> = {
   claude: {
     cmd: "claude",
     args: ["-p", prompt, "--permission-mode", "acceptEdits", "--allowedTools", "Bash", "Read", "Write", "Edit", "Glob", "Grep", "Skill"],
   },
-  codex: { cmd: "codex", args: ["exec", "--full-auto", prompt] },
+  codex: { cmd: codexCmd, args: ["exec", "--full-auto", prompt] },
 };
 
 // Usage-limit and auth failures mean "try the next provider"; anything else is a real error.
@@ -47,7 +52,7 @@ function connected(name: string) {
   const check =
     name === "claude"
       ? spawnSync("claude", ["auth", "status"], { encoding: "utf8" })
-      : spawnSync("codex", ["login", "status"], { encoding: "utf8" });
+      : spawnSync(codexCmd, ["login", "status"], { encoding: "utf8" });
   if (check.error || check.status !== 0) return false;
   return name === "claude" ? /"loggedIn":\s*true/.test(check.stdout) : true;
 }

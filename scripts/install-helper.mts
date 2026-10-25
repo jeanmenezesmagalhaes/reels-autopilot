@@ -30,7 +30,7 @@ on open location theURL
   if theURL is "reelsautopilot://connect/claude" then
     runInTerminal("claude auth login && npm run -s pipeline:run -- ping && ${esc(done)}")
   else if theURL is "reelsautopilot://connect/chatgpt" then
-    runInTerminal("(command -v codex >/dev/null || npm install -g @openai/codex@0.164.0) && codex login && npm run -s pipeline:run -- ping && ${esc(done)}")
+    runInTerminal("C=$(command -v codex || echo /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex); ([ -x \\"$C\\" ] || npm install -g @openai/codex@0.164.0) && C=$(command -v codex || echo /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex) && (\\"$C\\" login status >/dev/null 2>&1 || \\"$C\\" login) && npm run -s pipeline:run -- ping && ${esc(done)}")
   else if theURL is "reelsautopilot://ping" then
     do shell script "cd " & quoted form of repoPath & " && PATH=" & quoted form of pathEnv & " npm run -s pipeline:run -- ping >/dev/null 2>&1 &"
   end if

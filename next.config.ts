@@ -15,6 +15,11 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
         ],
       },
+      {
+        // Pages only (not static assets): never cache, so connection status is always current.
+        source: "/((?!_next/|api/).*)",
+        headers: [{ key: "Cache-Control", value: "private, no-store" }],
+      },
     ];
   },
 };
