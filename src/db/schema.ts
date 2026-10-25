@@ -33,9 +33,18 @@ export const variants = pgTable("variants", {
   attempts: integer("attempts").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   publishedAt: timestamp("published_at", { withTimezone: true }),
+  // Instagram insights, refreshed by the cron tick for recent posts
+  views: integer("views"),
+  reach: integer("reach"),
+  likes: integer("likes"),
+  comments: integer("comments"),
+  shares: integer("shares"),
+  saves: integer("saves"),
+  avgWatchMs: integer("avg_watch_ms"),
+  metricsAt: timestamp("metrics_at", { withTimezone: true }),
 });
 
-// Key/value store: ig_access_token, ig_token_refreshed_at, paused
+// Key/value store: ig_access_token, ig_token_refreshed_at, paused, learnings
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),

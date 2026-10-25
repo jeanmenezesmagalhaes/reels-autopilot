@@ -1,10 +1,12 @@
-import { and, asc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { del } from "@vercel/blob";
+import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { db, getSetting, schema, setSetting } from "@/db";
 import type { Variant } from "@/db/schema";
 import {
   createTrialReelContainer,
   getContainerStatus,
   getPermalink,
+  getReelInsights,
   publishContainer,
   refreshLongLivedToken,
   type GraduationStrategy,
@@ -15,6 +17,10 @@ const { variants } = schema;
 const MAX_ATTEMPTS = 3;
 const TOKEN_REFRESH_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
 const POLL_INTERVAL_MS = 10_000;
+// Only post between 08:00 and 22:59 Brasília time.
+const POST_HOURS = { from: 8, to: 22, timeZone: "America/Sao_Paulo" };
+const METRICS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+const METRICS_STALE_MS = 6 * 60 * 60 * 1000;
 
 export type TickResult = { log: string[] };
 
@@ -64,7 +70,55 @@ async function publishFinished(token: string, userId: string, v: Variant, log: s
     .set({ status: "published", mediaId, permalink, publishedAt: new Date(), error: null })
     .where(eq(variants.id, v.id));
   log.push(`variant ${v.id} published ${permalink ?? mediaId}`);
+  // The video is live on Instagram now; don't keep a public copy around.
+  await del(v.blobUrl).catch((err) => log.push(`blob delete failed: ${(err as Error).message}`));
   return true;
+}
+
+async function refreshMetrics(token: string, log: string[]) {
+  const now = Date.now();
+  const due = await db()
+    .select()
+    .from(variants)
+    .where(
+      and(
+        eq(variants.status, "published"),
+        isNotNull(variants.mediaId),
+        gte(variants.publishedAt, new Date(now - METRICS_WINDOW_MS)),
+        or(isNull(variants.metricsAt), lt(variants.metricsAt, new Date(now - METRICS_STALE_MS))),
+      ),
+    )
+    .limit(15);
+  for (const v of due) {
+    try {
+      const m = await getReelInsights(token, v.mediaId!);
+      await db()
+        .update(variants)
+        .set({
+          views: m.views,
+          reach: m.reach,
+          likes: m.likes,
+          comments: m.comments,
+          shares: m.shares,
+          saves: m.saved,
+          avgWatchMs: m.ig_reels_avg_watch_time,
+          metricsAt: new Date(),
+        })
+        .where(eq(variants.id, v.id));
+    } catch (err) {
+      log.push(`metrics ${v.id}: ${(err as Error).message}`);
+    }
+  }
+  if (due.length) log.push(`metrics refreshed for ${due.length}`);
+}
+
+function insidePostingHours() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: POST_HOURS.timeZone }).format(
+      new Date(),
+    ),
+  );
+  return hour >= POST_HOURS.from && hour <= POST_HOURS.to;
 }
 
 // Round-robin: next variant comes from the video that went longest without a post.
@@ -117,6 +171,7 @@ export async function tick({ force = false, deadlineMs = 240_000 } = {}): Promis
 
   const { userId, postsPerDay, graduation } = config();
   const token = await getToken(log);
+  await refreshMetrics(token, log);
 
   // 1. Finish containers left from a previous tick.
   const processing = await db().select().from(variants).where(eq(variants.status, "processing"));
@@ -124,6 +179,10 @@ export async function tick({ force = false, deadlineMs = 240_000 } = {}): Promis
   if (processing.length > 0 && !force) return { log };
 
   // 2. Start the next one if the pacing allows it.
+  if (!force && !insidePostingHours()) {
+    log.push("outside posting hours");
+    return { log };
+  }
   if (!force && !(await slotIsFree(postsPerDay))) {
     log.push("no free slot");
     return { log };

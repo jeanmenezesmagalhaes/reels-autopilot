@@ -42,3 +42,13 @@ next-env.d.ts
 
 # keep the template
 !.env.example
+
+# agent tooling installed by integrations
+/.agents/
+/.claude/skills/
+/skills-lock.json
+
+# impeccable scratch
+/.impeccable/mocks/
+/.impeccable/review/
+/.impeccable/decision-payload.json

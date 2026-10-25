@@ -16,15 +16,15 @@ export class InstagramError extends Error {
 async function call<T>(token: string, path: string, init: { method?: "GET" | "POST"; params?: Record<string, string> } = {}) {
   const method = init.method ?? "GET";
   const url = new URL(path.startsWith("http") ? path : `${BASE}${path}`);
-  // Token goes in the query (GET) or form body (POST), as in Meta's docs.
-  const params = { ...init.params, access_token: token };
+  // Token travels in a header, never in the URL, so it can't leak into logs.
+  const headers = { Authorization: `Bearer ${token}` };
   let body: URLSearchParams | undefined;
   if (method === "GET") {
-    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+    for (const [k, v] of Object.entries(init.params ?? {})) url.searchParams.set(k, v);
   } else {
-    body = new URLSearchParams(params);
+    body = new URLSearchParams(init.params);
   }
-  const res = await fetch(url, { method, body, cache: "no-store" });
+  const res = await fetch(url, { method, headers, body, cache: "no-store" });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.error) {
     const msg = json.error?.error_user_msg ?? json.error?.message ?? `HTTP ${res.status}`;
@@ -66,6 +66,18 @@ export function publishContainer(token: string, userId: string, containerId: str
 
 export function getPermalink(token: string, mediaId: string) {
   return call<{ permalink?: string }>(token, `/${mediaId}`, { params: { fields: "permalink" } });
+}
+
+const INSIGHT_METRICS = ["views", "reach", "likes", "comments", "shares", "saved", "ig_reels_avg_watch_time"] as const;
+export type Insights = Partial<Record<(typeof INSIGHT_METRICS)[number], number>>;
+
+export async function getReelInsights(token: string, mediaId: string): Promise<Insights> {
+  const res = await call<{ data: { name: string; values?: { value: number }[]; total_value?: { value: number } }[] }>(
+    token,
+    `/${mediaId}/insights`,
+    { params: { metric: INSIGHT_METRICS.join(",") } },
+  );
+  return Object.fromEntries(res.data.map((m) => [m.name, m.total_value?.value ?? m.values?.[0]?.value ?? 0]));
 }
 
 // Long-lived tokens last 60 days; refreshing resets the clock (token must be >24h old).

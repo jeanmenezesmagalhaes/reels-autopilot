@@ -1,0 +1,24 @@
+# Vercel Hobby only allows one cron per day, so GitHub Actions calls the
+# tick every hour. The tick itself decides whether it's time to post.
+name: tick
+
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Call /api/cron/tick
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          curl --fail-with-body --silent --show-error --max-time 320 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$APP_URL/api/cron/tick"
