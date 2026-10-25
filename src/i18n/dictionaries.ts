@@ -28,6 +28,15 @@ const pt = {
     tokenAlert: "O token do Instagram não renova há dias. Gere um novo no app da Meta e atualize IG_ACCESS_TOKEN na Vercel.",
   },
   tabs: { label: "Visão", board: "Quadro", results: "Resultados" },
+  login: {
+    subtitle: "Entra para ver tua fila e o que está funcionando.",
+    password: "Senha",
+    submit: "Entrar",
+    submitting: "Entrando…",
+    wrong: "Senha incorreta.",
+    locked: "Muitas tentativas. Tenta de novo em 15 minutos.",
+    logout: "Sair",
+  },
   board: {
     planned: "Planejado",
     editing: "Em edição",
@@ -112,6 +121,15 @@ const en: Dictionary = {
     tokenAlert: "The Instagram token hasn't renewed for days. Generate a new one in the Meta app and update IG_ACCESS_TOKEN on Vercel.",
   },
   tabs: { label: "View", board: "Board", results: "Results" },
+  login: {
+    subtitle: "Sign in to see your queue and what's working.",
+    password: "Password",
+    submit: "Sign in",
+    submitting: "Signing in…",
+    wrong: "Wrong password.",
+    locked: "Too many attempts. Try again in 15 minutes.",
+    logout: "Sign out",
+  },
   board: {
     planned: "Planned",
     editing: "Editing",
@@ -194,6 +212,15 @@ const es: Dictionary = {
     tokenAlert: "El token de Instagram no se renueva hace días. Genera uno nuevo en la app de Meta y actualiza IG_ACCESS_TOKEN en Vercel.",
   },
   tabs: { label: "Vista", board: "Tablero", results: "Resultados" },
+  login: {
+    subtitle: "Entra para ver tu cola y lo que está funcionando.",
+    password: "Contraseña",
+    submit: "Entrar",
+    submitting: "Entrando…",
+    wrong: "Contraseña incorrecta.",
+    locked: "Demasiados intentos. Intenta de nuevo en 15 minutos.",
+    logout: "Salir",
+  },
   board: {
     planned: "Planeado",
     editing: "En edición",

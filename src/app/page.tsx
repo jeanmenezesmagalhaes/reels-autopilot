@@ -8,6 +8,7 @@ import { cookies } from "next/headers";
 import { estimateNextPostAt, pickNext } from "@/lib/scheduler";
 import { postNextNow, setPreference, togglePause } from "./actions";
 import { Board } from "./board";
+import { logout } from "./login/actions";
 import { PERIODS, Results, type Period } from "./results";
 
 export const dynamic = "force-dynamic";
@@ -172,6 +173,11 @@ function Settings({ locale, theme }: { locale: keyof typeof dictionaries; theme:
             </form>
           ))}
         </div>
+        <form action={logout}>
+          <button type="submit" className="w-full cursor-pointer rounded-full px-3 py-1.5 text-left text-sm font-medium text-ink-muted hover:bg-ground-raised hover:text-ink">
+            {t.login.logout}
+          </button>
+        </form>
       </div>
     </details>
   );
