@@ -1,29 +1,28 @@
 import { desc, eq } from "drizzle-orm";
 import { db, getSetting, schema } from "@/db";
-import { Chevron } from "@/components/chevron";
 import { SubmitButton } from "@/components/submit-button";
-import { getDictionary, LOCALES, dictionaries } from "@/i18n";
+import { getDictionary } from "@/i18n";
 import { when } from "@/lib/format";
-import { cookies } from "next/headers";
 import { estimateNextPostAt, pickNext } from "@/lib/scheduler";
-import { disconnectInstagram, postNextNow, setPreference, togglePause } from "./actions";
+import { connectionStatus } from "@/lib/status";
+import { dismissDemo, postNextNow, togglePause } from "./actions";
 import { Board } from "./board";
-import { logout } from "./login/actions";
+import { demoContent } from "./demo";
+import { Onboarding } from "./onboarding";
 import { PERIODS, Results, type Period } from "./results";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type SearchParams = Promise<{ view?: string; periodo?: string; ig?: string }>;
+type SearchParams = Promise<{ view?: string; periodo?: string }>;
 
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const view = params.view === "resultados" ? "resultados" : "quadro";
   const period: Period = (PERIODS as readonly string[]).includes(params.periodo ?? "") ? (params.periodo as Period) : "30";
   const { locale, t } = await getDictionary();
-  const theme = (await cookies()).get("theme")?.value ?? "system";
   const h = t.header;
-  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince, storedToken, igUserId, igUsername, runnerRaw] = await Promise.all([
+  const [videos, variants, ideas, paused, learnings, next, nextAt, status, demoDismissed, onboardingHidden] = await Promise.all([
     db().select().from(schema.videos).orderBy(desc(schema.videos.createdAt)),
     db().select().from(schema.variants),
     db().select().from(schema.ideas).where(eq(schema.ideas.status, "planned")).orderBy(desc(schema.ideas.createdAt)),
@@ -31,13 +30,12 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     getSetting("learnings").then((l) => l || undefined),
     pickNext(),
     estimateNextPostAt(),
-    getSetting("ig_token_failing_since"),
-    getSetting("ig_access_token"),
-    getSetting("ig_user_id"),
-    getSetting("ig_username"),
-    getSetting("runner"),
+    connectionStatus(),
+    getSetting("demo_dismissed"),
+    getSetting("onboarding_hidden"),
   ]);
-  const tokenAlert = Number(tokenFailingSince) > 0 && Date.now() - Number(tokenFailingSince) > 3 * 86_400_000;
+  const ig = status.principalIg;
+  const tokenAlert = ig?.status === "error";
   const isPaused = paused === "true";
   const publishing = variants.find((v) => v.status === "processing");
   const nextVideo = next && videos.find((v) => v.id === next.videoId);
@@ -46,7 +44,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   // The hero answers "what happens next?" in priority order: publishing now, nothing
   // queued, Instagram not connected, paused, or the next post time. Pause/resume and
   // "post now" only appear when there is something they would act on.
-  const igReady = Boolean(storedToken && igUserId);
+  const igReady = Boolean(ig);
   const waiting = variants.filter((v) => v.status === "queued").length;
   const hasQueue = waiting > 0 || Boolean(publishing);
   let bigTime: string;
@@ -82,16 +80,22 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     headline = nextVideo?.title ?? "";
     detail = next ? h.next(next.label, w ? w.day : undefined) : h.waiting(waiting);
   }
-  // Which AI edits on the creator's Mac, reported by `npm run pipeline:run`.
-  const runner = runnerRaw ? (JSON.parse(runnerRaw) as { provider: string; ok: boolean; at: number }) : undefined;
-  const aiName = runner?.provider === "codex" ? "ChatGPT" : runner?.provider === "claude" ? "Claude" : undefined;
-  const editorLine =
-    runner && aiName
-      ? h.editor(aiName, new Intl.RelativeTimeFormat(t.intl, { numeric: "auto" }).format(-Math.round((Date.now() - runner.at) / 60000), "minute"))
-      : h.editorNone;
+  // First visit: example cards in every column until the creator has content of
+  // their own or removes them. Examples are rendered only, never stored or posted.
+  const hasOwnContent = videos.length > 0 || ideas.length > 0;
+  const showDemo = !hasOwnContent && demoDismissed !== "true";
+  const demo = showDemo ? demoContent(locale) : undefined;
+  const hasResult = variants.some((v) => v.status === "published" && v.views != null);
+  const steps = [
+    { key: "instagram" as const, done: igReady, href: "/api/instagram/connect" },
+    { key: "ai" as const, done: status.aiReady, href: "/ajustes#ia" },
+    { key: "video" as const, done: videos.length > 0 },
+    { key: "result" as const, done: hasResult },
+  ];
+  const showOnboarding = onboardingHidden !== "true" && steps.some((s) => !s.done);
 
   const canControl = igReady && waiting > 0 && !publishing;
-  const navStatus = !igReady ? h.igMissingShort : `@${igUsername} · ${isPaused ? h.paused : h.running(postsPerDay)}`;
+  const navStatus = !igReady ? h.igMissingShort : `${ig.label} · ${isPaused ? h.paused : h.running(postsPerDay)}`;
 
   return (
     <>
@@ -100,7 +104,9 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <h1 className="text-[17px] font-semibold tracking-tight">Reels Autopilot</h1>
           <div className="flex items-center gap-5">
             <p className="hidden text-sm text-ink-muted sm:block">{navStatus}</p>
-            <Settings locale={locale} theme={theme} igConnected={igReady} editorLine={editorLine} />
+            <a href="/ajustes" className="rounded-full px-3 py-1 text-sm font-medium text-ink hover:bg-ground-raised">
+              {t.settings.link}
+            </a>
           </div>
         </div>
       </header>
@@ -119,18 +125,8 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               <p className="text-2xl font-semibold tracking-tight text-balance">{headline}</p>
               <p className="mt-1 text-[15px] text-ink-muted">{detail}</p>
               {note && <p className="mt-1 text-[15px] text-busy">{note}</p>}
-              {params.ig === "ok" && igReady && <p className="mt-1 text-[15px] text-ok">{h.igOk}</p>}
-              {params.ig === "erro" && <p className="mt-1 text-[15px] text-bad">{h.igError}</p>}
             </div>
           </div>
-          {!igReady && (
-            <a
-              href="/api/instagram/connect"
-              className="rounded-full bg-ink px-5 py-2 text-[15px] font-medium text-ground transition-[opacity,transform] duration-150 hover:opacity-85 active:scale-[0.97]"
-            >
-              {h.connectIg}
-            </a>
-          )}
           {canControl && (
             <div className="flex gap-2.5">
               <form action={togglePause}>
@@ -151,6 +147,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       </section>
 
       <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-8">
+        {showOnboarding && <Onboarding t={t} steps={steps} />}
         <nav aria-label={t.tabs.label} className="mb-8 inline-flex rounded-full bg-ground-raised p-1 text-[15px] font-medium">
           {[
             { id: "quadro", label: t.tabs.board },
@@ -166,76 +163,30 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             </a>
           ))}
         </nav>
+        {demo && (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-rule px-4 py-3">
+            <p className="text-[15px] text-ink-muted">{t.demo.banner}</p>
+            <form action={dismissDemo}>
+              <SubmitButton pending="…" variant="quiet">
+                {t.demo.remove}
+              </SubmitButton>
+            </form>
+          </div>
+        )}
         {view === "resultados" ? (
-          <Results t={t} period={period} videos={videos} variants={variants} learnings={learnings} />
+          <Results
+            t={t}
+            period={period}
+            videos={demo?.videos ?? videos}
+            variants={demo?.variants ?? variants}
+            learnings={demo?.learnings ?? learnings}
+          />
+        ) : demo ? (
+          <Board t={t} demoTag={t.demo.tag} ideas={demo.ideas} videos={demo.videos} variants={demo.variants} />
         ) : (
-          <Board t={t} editorHint={runner ? undefined : h.editorHint} ideas={ideas} videos={videos} variants={variants} nextVariantId={next?.id} nextAt={isPaused ? undefined : nextAt} />
+          <Board t={t} ideas={ideas} videos={videos} variants={variants} nextVariantId={next?.id} nextAt={isPaused ? undefined : nextAt} />
         )}
       </main>
     </>
-  );
-}
-
-const THEMES = ["system", "light", "dark"] as const;
-
-// Language and theme: two segmented controls behind one disclosure, no settings page.
-function Settings({
-  locale,
-  theme,
-  igConnected,
-  editorLine,
-}: {
-  locale: keyof typeof dictionaries;
-  theme: string;
-  igConnected: boolean;
-  editorLine: string;
-}) {
-  const t = dictionaries[locale];
-  const current = (THEMES as readonly string[]).includes(theme) ? (theme as (typeof THEMES)[number]) : "system";
-  const group = "flex rounded-full bg-ground-raised p-1";
-  const item = (active: boolean) =>
-    `rounded-full px-3 py-1 text-sm font-medium cursor-pointer ${active ? "bg-ground text-ink shadow-[0_1px_3px_rgba(0,0,0,0.12)]" : "text-ink-muted hover:text-ink"}`;
-  return (
-    <details className="group relative">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full px-3 py-1 text-sm text-ink-muted hover:bg-ground-raised hover:text-ink [&::-webkit-details-marker]:hidden">
-        {t.langName} · {t.themes[current]}
-        <span className="rotate-90">
-          <Chevron />
-        </span>
-      </summary>
-      <div className="absolute right-0 z-10 mt-2 flex flex-col gap-2 rounded-2xl border border-rule bg-ground p-2 shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
-        <p className="px-3 pt-1 text-sm text-ink-muted">{editorLine}</p>
-        <div className={group} role="group" aria-label={t.language}>
-          {LOCALES.map((l) => (
-            <form key={l} action={setPreference.bind(null, "lang", l)}>
-              <button type="submit" aria-pressed={l === locale} className={item(l === locale)}>
-                {dictionaries[l].langName}
-              </button>
-            </form>
-          ))}
-        </div>
-        <div className={group} role="group" aria-label={t.theme}>
-          {THEMES.map((th) => (
-            <form key={th} action={setPreference.bind(null, "theme", th)}>
-              <button type="submit" aria-pressed={th === current} className={item(th === current)}>
-                {t.themes[th]}
-              </button>
-            </form>
-          ))}
-        </div>
-        {igConnected && (
-          <form action={disconnectInstagram}>
-            <button type="submit" className="w-full cursor-pointer rounded-full px-3 py-1.5 text-left text-sm font-medium text-ink-muted hover:bg-ground-raised hover:text-ink">
-              {t.header.disconnectIg}
-            </button>
-          </form>
-        )}
-        <form action={logout}>
-          <button type="submit" className="w-full cursor-pointer rounded-full px-3 py-1.5 text-left text-sm font-medium text-ink-muted hover:bg-ground-raised hover:text-ink">
-            {t.login.logout}
-          </button>
-        </form>
-      </div>
-    </details>
   );
 }

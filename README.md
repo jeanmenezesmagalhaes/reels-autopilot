@@ -17,6 +17,18 @@ Plano e arquitetura: [PLAN.md](PLAN.md). Produto: [PRODUCT.md](PRODUCT.md).
    - **Resultados:** o que funcionou e o que não funcionou em 7, 30, 365 dias ou tudo.
    - Idioma (pt/en/es, pelo navegador) e tema (sistema/claro/escuro) no canto de cima.
 
+### Ajustes (no painel)
+
+Tudo que a pessoa conecta fica em **Ajustes**, com status de cada conexão:
+- **Instagram:** uma ou várias contas; escolhe em qual publicar; reconectar/desconectar.
+- **IA:** "Entrar com OpenRouter" (um login, várias IAs) ou colar chave de API do Claude, ChatGPT ou Gemini.
+  A chave é testada na hora e guardada criptografada. Ordem de uso com reserva automática.
+  Com uma IA conectada aqui, a análise diária roda no servidor.
+- **Edição no computador:** mostra se o editor do Mac está ligado e com qual IA.
+- **Conta:** idioma, tema, sair.
+
+No primeiro acesso aparecem **exemplos** (só visuais, nunca publicados) e o **Comece por aqui** com 4 passos.
+
 ### Conectar a tua IA (Claude ou ChatGPT)
 
 A edição usa a **tua** conta e os **teus** limites, no teu Mac, com o login oficial de cada ferramenta:

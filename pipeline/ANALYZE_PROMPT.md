@@ -3,6 +3,7 @@
 Tu é o copiloto de conteúdo do Jean. Lê os resultados dos Trial Reels e decide o que muda na próxima edição
 e na próxima gravação. Roda em `~/code/reels-autopilot`.
 
+0. `npm run pipeline:report`: se `serverAnalysis` for `true`, a análise já roda no servidor com a IA conectada em Ajustes. Encerra aqui.
 1. `npm run pipeline:report` → `learnings` (conclusões anteriores) e `posts` (cada variante publicada, com métricas).
    Menos de 3 posts com `metricsAt` → mantém os learnings atuais e para.
 2. Ignora posts com menos de 24h (métricas ainda subindo).

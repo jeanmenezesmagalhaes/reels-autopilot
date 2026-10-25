@@ -39,6 +39,8 @@ async function heartbeat(provider: string, ok: boolean) {
   }).catch(() => undefined);
 }
 
+const has = (cmd: string) => spawnSync("which", [cmd]).status === 0;
+
 // Only providers whose official CLI is installed and logged in on this Mac.
 function connected(name: string) {
   const check =
@@ -48,10 +50,23 @@ function connected(name: string) {
   if (check.error || check.status !== 0) return false;
   return name === "claude" ? /"loggedIn":\s*true/.test(check.stdout) : true;
 }
-const order = (process.env.AI_PROVIDERS ?? "claude,codex")
-  .split(",")
-  .map((p) => p.trim())
-  .filter((p) => providers[p] && connected(p));
+// A Claude key connected in Ajustes also powers the editor when this Mac has no Claude login.
+// It lives only in the child process environment, never on disk.
+const childEnv: NodeJS.ProcessEnv = { ...process.env };
+async function claudeKeyFromAjustes() {
+  const { APP_URL, PIPELINE_SECRET } = process.env;
+  if (!APP_URL || !PIPELINE_SECRET) return false;
+  const res = await fetch(new URL("/api/llm/editor", APP_URL), { headers: { authorization: `Bearer ${PIPELINE_SECRET}` } }).catch(() => undefined);
+  const key = res?.ok ? ((await res.json()) as { anthropic: string | null }).anthropic : null;
+  if (key) childEnv.ANTHROPIC_API_KEY = key;
+  return Boolean(key);
+}
+
+const order: string[] = [];
+for (const p of (process.env.AI_PROVIDERS ?? "claude,codex").split(",").map((x) => x.trim())) {
+  if (!providers[p]) continue;
+  if (connected(p) || (p === "claude" && has("claude") && (await claudeKeyFromAjustes()))) order.push(p);
+}
 
 // Don't spend the creator's AI limits when there is nothing to edit.
 function nothingToEdit() {
@@ -71,7 +86,7 @@ if (task === "ping" || (task === "edit" && nothingToEdit())) {
 for (const name of order) {
   const { cmd, args } = providers[name];
   console.log(`→ ${task} with ${name}`);
-  const run = spawnSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  const run = spawnSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024, env: childEnv });
   const output = `${run.stdout ?? ""}\n${run.stderr ?? ""}\n${run.error?.message ?? ""}`;
   process.stdout.write(run.stdout ?? "");
   if (run.status === 0 && !SWITCH.test(run.stderr ?? "")) {

@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 // encrypted, and is never sent to the browser.
 export async function GET(req: Request) {
   const done = (result: "ok" | "erro") => {
-    const res = NextResponse.redirect(new URL(`/?ig=${result}`, req.url));
+    const res = NextResponse.redirect(new URL(`/ajustes?ig=${result}`, req.url));
     res.cookies.delete({ name: IG_STATE_COOKIE, path: "/api/instagram" });
     return res;
   };

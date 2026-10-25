@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, getSetting, schema, setSetting } from "@/db";
 import { hasBearer } from "@/lib/auth";
+import { hasLlm } from "@/lib/llm";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,8 @@ export async function GET(req: Request) {
     .from(schema.ideas)
     .orderBy(desc(schema.ideas.createdAt))
     .limit(50);
-  return NextResponse.json({ learnings: (await getSetting("learnings")) ?? "", posts: rows, ideas });
+  // serverAnalysis: an AI is connected in Ajustes, so the server writes the analysis.
+  return NextResponse.json({ learnings: (await getSetting("learnings")) ?? "", posts: rows, ideas, serverAnalysis: await hasLlm() });
 }
 
 const body = z.union([

@@ -8,6 +8,30 @@ export const variantStatus = pgEnum("variant_status", [
   "skipped",
 ]);
 
+// Connected accounts: Instagram profiles (to post) and AI providers (to edit/analyse).
+// Secrets are AES-GCM encrypted (lib/secrets). `ownerId` is null for the personal
+// workspace; business workspaces will scope rows per brand/creator.
+export const connections = pgTable(
+  "connections",
+  {
+    id: serial("id").primaryKey(),
+    kind: text("kind").notNull(), // "instagram" | "llm"
+    provider: text("provider").notNull(), // instagram | anthropic | openai | google | openrouter
+    method: text("method").notNull(), // "oauth" | "api_key"
+    label: text("label").notNull(), // "@username" or "…a1b2"
+    externalId: text("external_id").notNull(), // Instagram user id, or the provider name for AI keys
+    secret: text("secret").notNull(),
+    priority: integer("priority").notNull().default(0), // 0 = principal / first to try
+    status: text("status").notNull().default("ok"), // "ok" | "error"
+    statusDetail: text("status_detail"),
+    ownerId: integer("owner_id"),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).defaultNow().notNull(),
+    refreshedAt: timestamp("refreshed_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("connections_provider_external").on(t.provider, t.externalId)],
+);
+
 // People who signed in with Google. "owner" opens the dashboard; everyone else is on
 // the early-access waitlist until the multi-user version ships.
 export const users = pgTable("users", {
@@ -82,3 +106,4 @@ export type Video = typeof videos.$inferSelect;
 export type Variant = typeof variants.$inferSelect;
 export type Idea = typeof ideas.$inferSelect;
 export type User = typeof users.$inferSelect;
+export type Connection = typeof connections.$inferSelect;

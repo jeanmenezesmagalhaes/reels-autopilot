@@ -1,8 +1,9 @@
 import { del } from "@vercel/blob";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
-import { db, getSetting, schema, setSetting } from "@/db";
+import { db, getSetting, schema } from "@/db";
 import type { Variant } from "@/db/schema";
-import { getIgAccount, saveIgToken } from "./instagram-account";
+import { maybeAnalyze } from "./analysis";
+import { getIgAccount, markIgStatus, saveIgToken } from "./instagram-account";
 import {
   createTrialReelContainer,
   getContainerStatus,
@@ -31,22 +32,19 @@ function config() {
   return { postsPerDay, graduation };
 }
 
-async function getToken(token: string, log: string[]) {
-  const refreshedAt = Number((await getSetting("ig_token_refreshed_at")) ?? 0);
-  if (Date.now() - refreshedAt < TOKEN_REFRESH_EVERY_MS) return token;
+// Long-lived tokens last 60 days; refresh weekly. A failure marks the account in
+// error so Ajustes shows it long before the token actually expires.
+async function getToken(account: { id: number; token: string; refreshedAt: Date }, log: string[]) {
+  if (Date.now() - account.refreshedAt.getTime() < TOKEN_REFRESH_EVERY_MS) return account.token;
   try {
-    const fresh = await refreshLongLivedToken(token);
-    await saveIgToken(fresh.access_token);
-    await setSetting("ig_token_refreshed_at", String(Date.now()));
-    await setSetting("ig_token_failing_since", "");
+    const fresh = await refreshLongLivedToken(account.token);
+    await saveIgToken(account.id, fresh.access_token);
     log.push("token refreshed");
     return fresh.access_token;
   } catch (err) {
-    // A brand-new token can't be refreshed for 24h; keep using it, but surface
-    // repeated failures on the dashboard before the 60-day token dies.
-    log.push(`token refresh skipped: ${(err as Error).message}`);
-    if (!(await getSetting("ig_token_failing_since"))) await setSetting("ig_token_failing_since", String(Date.now()));
-    return token;
+    log.push(`token refresh failed: ${(err as Error).message}`);
+    await markIgStatus(account.id, false, (err as Error).message);
+    return account.token;
   }
 }
 
@@ -256,13 +254,14 @@ async function runTick({ force = false, deadlineMs = 240_000 } = {}): Promise<Ti
     return { log };
   }
   const { userId } = account;
-  const token = await getToken(account.token, log);
+  const token = await getToken(account, log);
 
   try {
     await postNext({ token, userId, postsPerDay, graduation, force, deadline, log });
   } finally {
-    // Metrics last, so they never eat into the publishing time budget.
+    // Metrics and analysis last, so they never eat into the publishing time budget.
     if (Date.now() < deadline) await refreshMetrics(token, log);
+    if (Date.now() < deadline) await maybeAnalyze(log);
   }
   return { log };
 }

@@ -16,6 +16,7 @@
     "setup": "tsx scripts/setup-mac.mts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^1.3.0",
     "@neondatabase/serverless": "^1.2.0",
     "@vercel/blob": "^2.8.2",
     "drizzle-orm": "^0.45.4",

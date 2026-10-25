@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { db, getSetting, schema, setSetting } from "@/db";
-import { clearIgAccount } from "@/lib/instagram-account";
+import { makePrincipalInstagram, removeInstagram } from "@/lib/instagram-account";
+import { moveLlm, removeLlm, saveLlmKey, validateKey } from "@/lib/llm";
 import { tick } from "@/lib/scheduler";
 
 export async function togglePause() {
@@ -71,8 +72,59 @@ export async function setPreference(kind: "lang" | "theme", value: string) {
   revalidatePath("/");
 }
 
-// Forget the connected Instagram account (token included). Reconnect from the dashboard.
-export async function disconnectInstagram() {
-  await clearIgAccount();
-  revalidatePath("/");
+const idInput = z.number().int().positive();
+
+export async function disconnectInstagram(id: number) {
+  await removeInstagram(idInput.parse(id));
+  revalidatePath("/", "layout");
+}
+
+export async function setPrincipalInstagram(id: number) {
+  await makePrincipalInstagram(idInput.parse(id));
+  revalidatePath("/", "layout");
+}
+
+// --- Ajustes: AI connections -------------------------------------------------
+
+export type KeyState = { result?: "ok" | "bad" } | null;
+
+const keyInput = z.object({
+  provider: z.enum(["anthropic", "openai", "google"]),
+  key: z.string().trim().min(20).max(400),
+});
+
+// Tests the key with the provider before saving it (encrypted).
+export async function addLlmKey(_prev: KeyState, form: FormData): Promise<KeyState> {
+  const parsed = keyInput.safeParse({ provider: form.get("provider"), key: form.get("key") });
+  if (!parsed.success) return { result: "bad" };
+  try {
+    await validateKey(parsed.data.provider, parsed.data.key);
+  } catch {
+    return { result: "bad" };
+  }
+  await saveLlmKey(parsed.data.provider, parsed.data.key);
+  revalidatePath("/", "layout");
+  return { result: "ok" };
+}
+
+export async function removeLlmConnection(id: number) {
+  await removeLlm(idInput.parse(id));
+  revalidatePath("/", "layout");
+}
+
+export async function moveLlmConnection(id: number, direction: "up" | "down") {
+  await moveLlm(idInput.parse(id), z.enum(["up", "down"]).parse(direction));
+  revalidatePath("/", "layout");
+}
+
+// --- First-run guidance -------------------------------------------------------
+
+export async function dismissDemo() {
+  await setSetting("demo_dismissed", "true");
+  revalidatePath("/", "layout");
+}
+
+export async function hideOnboarding() {
+  await setSetting("onboarding_hidden", "true");
+  revalidatePath("/", "layout");
 }
