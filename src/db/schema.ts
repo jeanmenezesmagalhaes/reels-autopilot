@@ -1,4 +1,4 @@
-import { integer, pgEnum, pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { integer, pgEnum, pgTable, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const variantStatus = pgEnum("variant_status", [
   "queued", // waiting for its turn
@@ -8,6 +8,19 @@ export const variantStatus = pgEnum("variant_status", [
   "skipped",
 ]);
 
+export const ideaStatus = pgEnum("idea_status", ["planned", "recorded", "dropped"]);
+
+// Kanban "Planejado": recording ideas from Jean or suggested by the analysis routine.
+export const ideas = pgTable("ideas", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  notes: text("notes"),
+  source: text("source").notNull().default("jean"), // "jean" | "analise"
+  status: ideaStatus("status").notNull().default("planned"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// A video with no variants yet is still being edited on the Mac.
 export const videos = pgTable("videos", {
   id: serial("id").primaryKey(),
   slug: text("slug").notNull().unique(),
@@ -42,7 +55,10 @@ export const variants = pgTable("variants", {
   saves: integer("saves"),
   avgWatchMs: integer("avg_watch_ms"),
   metricsAt: timestamp("metrics_at", { withTimezone: true }),
-});
+},
+  // Re-running an upload must never queue the same version twice.
+  (t) => [uniqueIndex("variants_video_label").on(t.videoId, t.label)],
+);
 
 // Key/value store: ig_access_token, ig_token_refreshed_at, paused, learnings
 export const settings = pgTable("settings", {
@@ -53,3 +69,4 @@ export const settings = pgTable("settings", {
 
 export type Video = typeof videos.$inferSelect;
 export type Variant = typeof variants.$inferSelect;
+export type Idea = typeof ideas.$inferSelect;

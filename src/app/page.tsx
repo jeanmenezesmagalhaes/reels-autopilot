@@ -1,120 +1,178 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, getSetting, schema } from "@/db";
-import { postNextNow, setVariantStatus, togglePause } from "./actions";
+import { Chevron } from "@/components/chevron";
+import { SubmitButton } from "@/components/submit-button";
+import { getDictionary, LOCALES, dictionaries } from "@/i18n";
+import { when } from "@/lib/format";
+import { cookies } from "next/headers";
+import { estimateNextPostAt, pickNext } from "@/lib/scheduler";
+import { postNextNow, setPreference, togglePause } from "./actions";
+import { Board } from "./board";
+import { PERIODS, Results, type Period } from "./results";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const statusStyle: Record<string, string> = {
-  queued: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-  processing: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  published: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300",
-  failed: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
-  skipped: "bg-zinc-100 text-zinc-400 line-through dark:bg-zinc-800",
-};
+type SearchParams = Promise<{ view?: string; periodo?: string }>;
 
-const statusLabel: Record<string, string> = {
-  queued: "na fila",
-  processing: "processando",
-  published: "publicado",
-  failed: "falhou",
-  skipped: "pulado",
-};
-
-export default async function Home() {
-  const [videos, variants, paused] = await Promise.all([
+export default async function Home({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const view = params.view === "resultados" ? "resultados" : "quadro";
+  const period: Period = (PERIODS as readonly string[]).includes(params.periodo ?? "") ? (params.periodo as Period) : "30";
+  const { locale, t } = await getDictionary();
+  const theme = (await cookies()).get("theme")?.value ?? "system";
+  const h = t.header;
+  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince] = await Promise.all([
     db().select().from(schema.videos).orderBy(desc(schema.videos.createdAt)),
     db().select().from(schema.variants),
+    db().select().from(schema.ideas).where(eq(schema.ideas.status, "planned")).orderBy(desc(schema.ideas.createdAt)),
     getSetting("paused"),
+    getSetting("learnings").then((l) => l || undefined),
+    pickNext(),
+    estimateNextPostAt(),
+    getSetting("ig_token_failing_since"),
   ]);
+  const tokenAlert = Number(tokenFailingSince) > 0 && Date.now() - Number(tokenFailingSince) > 3 * 86_400_000;
   const isPaused = paused === "true";
-  const count = (s: string) => variants.filter((v) => v.status === s).length;
+  const publishing = variants.find((v) => v.status === "processing");
+  const nextVideo = next && videos.find((v) => v.id === next.videoId);
+  const postsPerDay = Number(process.env.POSTS_PER_DAY ?? 2);
+
+  // The hero figure is the next post time, or a state word in its system colour.
+  let bigTime: string;
+  let bigTone = "text-ink";
+  let headline: string;
+  let detail: string;
+  const waiting = variants.filter((v) => v.status === "queued").length;
+  if (isPaused) {
+    bigTime = h.pausedWord;
+    bigTone = "text-busy";
+    headline = nextVideo ? nextVideo.title : h.emptyHeadline;
+    detail = waiting ? h.waiting(waiting) : h.dropHint;
+  } else if (publishing) {
+    bigTime = h.now;
+    bigTone = "text-ok";
+    headline = videos.find((v) => v.id === publishing.videoId)?.title ?? "";
+    detail = h.publishing(publishing.label);
+  } else if (next && nextVideo) {
+    const w = nextAt && when(t, nextAt);
+    bigTime = w ? w.time : "—";
+    headline = nextVideo.title;
+    detail = h.next(next.label, w ? w.day : undefined);
+  } else {
+    bigTime = h.emptyWord;
+    bigTone = "text-ink-muted";
+    headline = h.emptyHeadline;
+    detail = h.dropHint;
+  }
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-10">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">Reels Autopilot</h1>
-          <p className="text-sm text-zinc-500">
-            {count("queued")} na fila · {count("processing")} processando · {count("published")} publicados ·{" "}
-            {count("failed")} falharam
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <form action={togglePause}>
-            <button className="rounded-md border px-3 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900">
-              {isPaused ? "Retomar postagens" : "Pausar postagens"}
-            </button>
-          </form>
-          <form
-            action={async () => {
-              "use server";
-              await postNextNow();
-            }}
-          >
-            <button className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900">
-              Postar próximo agora
-            </button>
-          </form>
+    <>
+      <header className="sticky top-0 z-20 border-b border-rule bg-ground/80 backdrop-blur-xl backdrop-saturate-150">
+        <div className="mx-auto flex h-12 max-w-[1200px] items-center justify-between gap-4 px-4 sm:px-8">
+          <h1 className="text-[17px] font-semibold tracking-tight">Reels Autopilot</h1>
+          <div className="flex items-center gap-5">
+            {!isPaused && <p className="hidden text-sm text-ink-muted sm:block">{h.running(postsPerDay)}</p>}
+            <Settings locale={locale} theme={theme} />
+          </div>
         </div>
       </header>
 
-      {isPaused && (
-        <p className="mb-6 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-900/30 dark:text-amber-200">
-          Postagens pausadas. O cron não publica nada até retomar.
+      {tokenAlert && (
+        <p role="alert" className="mx-auto mt-4 max-w-[1200px] px-4 text-[15px] font-medium text-bad sm:px-8">
+          {h.tokenAlert}
         </p>
       )}
 
-      {videos.length === 0 && (
-        <p className="text-zinc-500">
-          Nenhum vídeo ainda. Larga um vídeo cru em <code>~/Movies/ReelsAutopilot/01-cru</code>.
-        </p>
-      )}
+      <section className="mx-auto max-w-[1200px] px-4 pt-10 pb-8 sm:px-8">
+        <div className="flex flex-wrap items-end justify-between gap-6">
+          <div className="flex min-w-0 flex-wrap items-end gap-x-8 gap-y-3">
+            <p className={`text-6xl leading-none font-semibold tracking-tight tabular-nums sm:text-7xl ${bigTone}`}>{bigTime}</p>
+            <div className="min-w-0 pb-1">
+              <p className="text-2xl font-semibold tracking-tight text-balance">{headline}</p>
+              <p className="mt-1 text-[15px] text-ink-muted">{detail}</p>
+            </div>
+          </div>
+          <div className="flex gap-2.5">
+            <form action={togglePause}>
+              <SubmitButton pending={isPaused ? h.resuming : h.pausing} variant={isPaused ? "primary" : "quiet"}>
+                {isPaused ? h.resume : h.pause}
+              </SubmitButton>
+            </form>
+            {!isPaused && next && !publishing && (
+              <form action={postNextNow}>
+                <SubmitButton pending={h.posting} variant="primary">
+                  {h.postNow}
+                </SubmitButton>
+              </form>
+            )}
+          </div>
+        </div>
+      </section>
 
-      <div className="space-y-8">
-        {videos.map((video) => (
-          <section key={video.id}>
-            <h2 className="mb-2 font-medium">
-              {video.title} <span className="text-sm font-normal text-zinc-400">{video.slug}</span>
-            </h2>
-            <ul className="divide-y rounded-lg border">
-              {variants
-                .filter((v) => v.videoId === video.id)
-                .sort((a, b) => a.id - b.id)
-                .map((v) => (
-                  <li key={v.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
-                    <span className={`rounded px-2 py-0.5 text-xs ${statusStyle[v.status]}`}>
-                      {statusLabel[v.status]}
-                    </span>
-                    <a href={v.blobUrl} target="_blank" className="font-medium hover:underline">
-                      {v.label}
-                    </a>
-                    <span className="min-w-0 flex-1 truncate text-zinc-500" title={v.caption}>
-                      {v.caption}
-                    </span>
-                    {v.error && (
-                      <span className="w-full text-xs text-red-600" title={v.error}>
-                        {v.error}
-                      </span>
-                    )}
-                    {v.permalink && (
-                      <a href={v.permalink} target="_blank" className="text-blue-600 hover:underline">
-                        ver post
-                      </a>
-                    )}
-                    {(v.status === "queued" || v.status === "failed") && (
-                      <form action={setVariantStatus.bind(null, v.id, v.status === "failed" ? "queued" : "skipped")}>
-                        <button className="text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-white">
-                          {v.status === "failed" ? "tentar de novo" : "pular"}
-                        </button>
-                      </form>
-                    )}
-                  </li>
-                ))}
-            </ul>
-          </section>
-        ))}
+      <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-8">
+        <nav aria-label={t.tabs.label} className="mb-8 inline-flex rounded-full bg-ground-raised p-1 text-[15px] font-medium">
+          {[
+            { id: "quadro", label: t.tabs.board },
+            { id: "resultados", label: t.tabs.results },
+          ].map((tab) => (
+            <a
+              key={tab.id}
+              href={tab.id === "quadro" ? "/" : "/?view=resultados"}
+              aria-current={tab.id === view ? "page" : undefined}
+              className={`rounded-full px-4 py-1.5 ${tab.id === view ? "bg-ground text-ink shadow-[0_1px_3px_rgba(0,0,0,0.12)]" : "text-ink-muted hover:text-ink"}`}
+            >
+              {tab.label}
+            </a>
+          ))}
+        </nav>
+        {view === "resultados" ? (
+          <Results t={t} period={period} videos={videos} variants={variants} learnings={learnings} />
+        ) : (
+          <Board t={t} ideas={ideas} videos={videos} variants={variants} nextVariantId={next?.id} nextAt={isPaused ? undefined : nextAt} />
+        )}
+      </main>
+    </>
+  );
+}
+
+const THEMES = ["system", "light", "dark"] as const;
+
+// Language and theme: two segmented controls behind one disclosure, no settings page.
+function Settings({ locale, theme }: { locale: keyof typeof dictionaries; theme: string }) {
+  const t = dictionaries[locale];
+  const current = (THEMES as readonly string[]).includes(theme) ? (theme as (typeof THEMES)[number]) : "system";
+  const group = "flex rounded-full bg-ground-raised p-1";
+  const item = (active: boolean) =>
+    `rounded-full px-3 py-1 text-sm font-medium cursor-pointer ${active ? "bg-ground text-ink shadow-[0_1px_3px_rgba(0,0,0,0.12)]" : "text-ink-muted hover:text-ink"}`;
+  return (
+    <details className="group relative">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full px-3 py-1 text-sm text-ink-muted hover:bg-ground-raised hover:text-ink [&::-webkit-details-marker]:hidden">
+        {t.langName} · {t.themes[current]}
+        <span className="rotate-90">
+          <Chevron />
+        </span>
+      </summary>
+      <div className="absolute right-0 z-10 mt-2 flex flex-col gap-2 rounded-2xl border border-rule bg-ground p-2 shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+        <div className={group} role="group" aria-label={t.language}>
+          {LOCALES.map((l) => (
+            <form key={l} action={setPreference.bind(null, "lang", l)}>
+              <button type="submit" aria-pressed={l === locale} className={item(l === locale)}>
+                {dictionaries[l].langName}
+              </button>
+            </form>
+          ))}
+        </div>
+        <div className={group} role="group" aria-label={t.theme}>
+          {THEMES.map((th) => (
+            <form key={th} action={setPreference.bind(null, "theme", th)}>
+              <button type="submit" aria-pressed={th === current} className={item(th === current)}>
+                {t.themes[th]}
+              </button>
+            </form>
+          ))}
+        </div>
       </div>
-    </main>
+    </details>
   );
 }

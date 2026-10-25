@@ -52,3 +52,7 @@ next-env.d.ts
 /.impeccable/mocks/
 /.impeccable/review/
 /.impeccable/decision-payload.json
+
+/.taste-skill/
+/.claude/launch.json
+/src/db/.tmp-*

@@ -13,11 +13,16 @@ export class InstagramError extends Error {
   }
 }
 
-async function call<T>(token: string, path: string, init: { method?: "GET" | "POST"; params?: Record<string, string> } = {}) {
+async function call<T>(
+  token: string,
+  path: string,
+  init: { method?: "GET" | "POST"; params?: Record<string, string>; tokenInQuery?: boolean } = {},
+) {
   const method = init.method ?? "GET";
   const url = new URL(path.startsWith("http") ? path : `${BASE}${path}`);
-  // Token travels in a header, never in the URL, so it can't leak into logs.
-  const headers = { Authorization: `Bearer ${token}` };
+  // Token travels in a header, so it stays out of URLs; refresh is the one documented exception.
+  const headers: Record<string, string> = init.tokenInQuery ? {} : { Authorization: `Bearer ${token}` };
+  if (init.tokenInQuery) url.searchParams.set("access_token", token);
   let body: URLSearchParams | undefined;
   if (method === "GET") {
     for (const [k, v] of Object.entries(init.params ?? {})) url.searchParams.set(k, v);
@@ -84,5 +89,7 @@ export async function getReelInsights(token: string, mediaId: string): Promise<I
 export function refreshLongLivedToken(token: string) {
   return call<{ access_token: string; expires_in: number }>(token, "https://graph.instagram.com/refresh_access_token", {
     params: { grant_type: "ig_refresh_token" },
+    // Meta documents this endpoint with the token as a query parameter only.
+    tokenInQuery: true,
   });
 }

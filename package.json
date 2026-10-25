@@ -10,7 +10,8 @@
     "pipeline:upload": "tsx --env-file=.env.local pipeline/upload.mts",
     "db:push": "drizzle-kit push",
     "typecheck": "tsc --noEmit",
-    "pipeline:report": "tsx --env-file=.env.local pipeline/report.mts"
+    "pipeline:report": "tsx --env-file=.env.local pipeline/report.mts",
+    "pipeline:run": "tsx --env-file=.env.local pipeline/run.mts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

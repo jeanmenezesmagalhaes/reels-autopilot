@@ -3,7 +3,7 @@
 //
 // Folder layout: 03-prontos/<slug>/manifest.json + the mp4 files it lists.
 import { execFileSync } from "node:child_process";
-import { createReadStream, existsSync, readdirSync, readFileSync, renameSync } from "node:fs";
+import { createReadStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { put } from "@vercel/blob";
@@ -56,7 +56,9 @@ async function uploadFolder(dir: string) {
   if (!res.ok) throw new Error(`${manifest.slug}: ingest failed ${res.status} ${await res.text()}`);
   console.log(`  queued ${variants.length} variants`);
 
-  renameSync(dir, join(queued, manifest.slug));
+  mkdirSync(queued, { recursive: true });
+  const target = existsSync(join(queued, manifest.slug)) ? join(queued, `${manifest.slug}-${Date.now()}`) : join(queued, manifest.slug);
+  renameSync(dir, target);
 }
 
 const folders = readdirSync(ready, { withFileTypes: true })

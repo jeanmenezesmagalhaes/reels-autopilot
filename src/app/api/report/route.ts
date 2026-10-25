@@ -36,16 +36,27 @@ export async function GET(req: Request) {
     .innerJoin(videos, eq(variants.videoId, videos.id))
     .where(eq(variants.status, "published"))
     .orderBy(desc(variants.publishedAt));
-  return NextResponse.json({ learnings: (await getSetting("learnings")) ?? "", posts: rows });
+  const ideas = await db()
+    .select({ title: schema.ideas.title, status: schema.ideas.status })
+    .from(schema.ideas)
+    .orderBy(desc(schema.ideas.createdAt))
+    .limit(50);
+  return NextResponse.json({ learnings: (await getSetting("learnings")) ?? "", posts: rows, ideas });
 }
 
-const body = z.object({ learnings: z.string().min(1).max(20_000) });
+const body = z.union([
+  z.object({ learnings: z.string().min(1).max(20_000) }),
+  z.object({
+    heartbeat: z.object({ provider: z.enum(["claude", "codex", "none"]), task: z.enum(["edit", "analyze"]), ok: z.boolean() }),
+  }),
+]);
 
-// The analysis routine saves its conclusions here; the dashboard shows them.
+// The analysis routine saves its conclusions here; the local runner reports each run.
 export async function POST(req: Request) {
   if (!hasBearer(req, process.env.PIPELINE_SECRET)) return unauthorized();
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: z.prettifyError(parsed.error) }, { status: 400 });
-  await setSetting("learnings", parsed.data.learnings);
+  if ("learnings" in parsed.data) await setSetting("learnings", parsed.data.learnings);
+  else await setSetting("runner", JSON.stringify({ ...parsed.data.heartbeat, at: Date.now() }));
   return NextResponse.json({ ok: true });
 }

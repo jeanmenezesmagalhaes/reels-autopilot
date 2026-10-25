@@ -13,6 +13,8 @@ Pastas (`REELS_DIR`, default `~/Movies/ReelsAutopilot`):
 1. Lista `01-cru/` (`.mov`, `.mp4`, `.m4v`). Nada novo e nada em `02-editando/` → para aqui, sem fazer mais nada.
 2. Pega **um** vídeo (o mais antigo). Ignora arquivo modificado há menos de 2 min (ainda copiando).
    Move para `02-editando/<slug>/source.<ext>`. Slug: `aaaa-mm-dd-tema-curto`, só `[a-z0-9-]`.
+   Avisa o painel que a edição começou (o card aparece em "Em edição"):
+   `npm run pipeline:report -- editing <slug> "<título curto>"`
 3. Roda `npm run pipeline:report` e lê o campo `learnings`. **Aplica o que está lá** — é o que os Trial Reels
    anteriores mostraram que funciona (formato, duração, tipo de hook, estilo de legenda).
 4. Transcreve e entende o conteúdo: assunto, melhor frase, melhor trecho de 15s, silêncios, erros, repetições.

@@ -30,7 +30,8 @@ const body = z.object({
         durationS: z.number().positive().optional(),
       }),
     )
-    .min(1),
+    // Empty list = "started editing": the video shows in the board's "Em edição" column.
+    .default([]),
 });
 
 export async function POST(req: Request) {
@@ -48,10 +49,13 @@ export async function POST(req: Request) {
     .values({ slug, title, sourceFile })
     .onConflictDoUpdate({ target: schema.videos.slug, set: { title } })
     .returning();
-  const rows = await db()
-    .insert(schema.variants)
-    .values(variants.map((v) => ({ ...v, videoId: video.id })))
-    .returning({ id: schema.variants.id });
+  const rows = variants.length
+    ? await db()
+        .insert(schema.variants)
+        .values(variants.map((v) => ({ ...v, videoId: video.id })))
+        .onConflictDoNothing()
+        .returning({ id: schema.variants.id })
+    : [];
 
   return NextResponse.json({ videoId: video.id, variantIds: rows.map((r) => r.id) });
 }

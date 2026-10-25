@@ -43,18 +43,37 @@ async function getToken(log: string[]) {
     const fresh = await refreshLongLivedToken(token);
     await setSetting("ig_access_token", fresh.access_token);
     await setSetting("ig_token_refreshed_at", String(Date.now()));
+    await setSetting("ig_token_failing_since", "");
     log.push("token refreshed");
     return fresh.access_token;
   } catch (err) {
-    // A brand-new token can't be refreshed for 24h; keep using it.
+    // A brand-new token can't be refreshed for 24h; keep using it, but surface
+    // repeated failures on the dashboard before the 60-day token dies.
     log.push(`token refresh skipped: ${(err as Error).message}`);
+    if (!(await getSetting("ig_token_failing_since"))) await setSetting("ig_token_failing_since", String(Date.now()));
     return token;
   }
 }
 
+async function markPublished(v: Variant, mediaId: string | null, permalink: string | undefined, log: string[]) {
+  await db()
+    .update(variants)
+    .set({ status: "published", mediaId, permalink, publishedAt: new Date(), error: null })
+    .where(eq(variants.id, v.id));
+  log.push(`variant ${v.id} published ${permalink ?? mediaId ?? "(found already published)"}`);
+  // The video is live on Instagram now; don't keep a public copy around.
+  await del(v.blobUrl).catch((err) => log.push(`blob delete failed: ${(err as Error).message}`));
+}
+
+// Returns true once the variant left "processing" (published or failed).
 async function publishFinished(token: string, userId: string, v: Variant, log: string[]) {
   const { status_code, status } = await getContainerStatus(token, v.containerId!);
   if (status_code === "IN_PROGRESS") return false;
+  // A previous run published it but died before saving; never treat that as a failure.
+  if (status_code === "PUBLISHED") {
+    await markPublished(v, null, undefined, log);
+    return true;
+  }
   if (status_code !== "FINISHED") {
     await db()
       .update(variants)
@@ -65,13 +84,7 @@ async function publishFinished(token: string, userId: string, v: Variant, log: s
   }
   const { id: mediaId } = await publishContainer(token, userId, v.containerId!);
   const { permalink } = await getPermalink(token, mediaId).catch(() => ({ permalink: undefined }));
-  await db()
-    .update(variants)
-    .set({ status: "published", mediaId, permalink, publishedAt: new Date(), error: null })
-    .where(eq(variants.id, v.id));
-  log.push(`variant ${v.id} published ${permalink ?? mediaId}`);
-  // The video is live on Instagram now; don't keep a public copy around.
-  await del(v.blobUrl).catch((err) => log.push(`blob delete failed: ${(err as Error).message}`));
+  await markPublished(v, mediaId, permalink, log);
   return true;
 }
 
@@ -112,17 +125,48 @@ async function refreshMetrics(token: string, log: string[]) {
   if (due.length) log.push(`metrics refreshed for ${due.length}`);
 }
 
-function insidePostingHours() {
-  const hour = Number(
-    new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: POST_HOURS.timeZone }).format(
-      new Date(),
-    ),
+function hourInPostingZone(date: Date) {
+  return Number(
+    new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: POST_HOURS.timeZone }).format(date),
   );
+}
+
+function insidePostingHours() {
+  const hour = hourInPostingZone(new Date());
   return hour >= POST_HOURS.from && hour <= POST_HOURS.to;
 }
 
+// Best guess of when the next post goes out, for the dashboard. Walks forward
+// hour by hour (the tick runs hourly at :23) until pacing and posting hours allow it.
+export async function estimateNextPostAt() {
+  const postsPerDay = Math.max(1, Number(process.env.POSTS_PER_DAY ?? 2));
+  const dayMs = 24 * 60 * 60 * 1000;
+  const minGapMs = (dayMs / postsPerDay) * 0.8;
+  const recent = await db()
+    .select({ at: variants.publishedAt })
+    .from(variants)
+    .where(and(eq(variants.status, "published"), gte(variants.publishedAt, new Date(Date.now() - dayMs))))
+    .orderBy(asc(variants.publishedAt));
+  const times = recent.map((r) => r.at!.getTime());
+
+  const t = new Date();
+  t.setUTCMinutes(23, 0, 0);
+  if (t.getTime() < Date.now()) t.setTime(t.getTime() + 60 * 60 * 1000);
+  for (let i = 0; i < 72; i++, t.setTime(t.getTime() + 60 * 60 * 1000)) {
+    const now = t.getTime();
+    const hour = hourInPostingZone(t);
+    if (hour < POST_HOURS.from || hour > POST_HOURS.to) continue;
+    const inWindow = times.filter((x) => now - x < dayMs);
+    if (inWindow.length >= postsPerDay) continue;
+    const last = times.at(-1);
+    if (last !== undefined && now - last < minGapMs) continue;
+    return new Date(now);
+  }
+  return undefined;
+}
+
 // Round-robin: next variant comes from the video that went longest without a post.
-async function pickNext() {
+export async function pickNext() {
   const queued = await db()
     .select()
     .from(variants)
@@ -160,7 +204,48 @@ async function slotIsFree(postsPerDay: number) {
   return !latest?.at || Date.now() - latest.at.getTime() >= minGapMs;
 }
 
-export async function tick({ force = false, deadlineMs = 240_000 } = {}): Promise<TickResult> {
+// Vercel cron, GitHub Actions and the "Post now" button can fire at the same time.
+// A lease row in `settings` makes sure only one tick runs; it expires on its own if a
+// run dies, so a crash never blocks posting for more than LOCK_MS.
+const LOCK_KEY = "tick_lock";
+const LOCK_MS = 6 * 60 * 1000;
+
+// Returns the lease value we wrote, so release only frees our own lease.
+async function acquireLock() {
+  const now = Date.now();
+  const until = String(now + LOCK_MS);
+  const inserted = await db()
+    .insert(schema.settings)
+    .values({ key: LOCK_KEY, value: until })
+    .onConflictDoNothing()
+    .returning({ key: schema.settings.key });
+  if (inserted.length) return until;
+  const taken = await db()
+    .update(schema.settings)
+    .set({ value: until, updatedAt: new Date() })
+    .where(and(eq(schema.settings.key, LOCK_KEY), sql`${schema.settings.value}::bigint < ${now}`))
+    .returning({ key: schema.settings.key });
+  return taken.length > 0 ? until : undefined;
+}
+
+async function releaseLock(until: string) {
+  await db()
+    .update(schema.settings)
+    .set({ value: "0" })
+    .where(and(eq(schema.settings.key, LOCK_KEY), eq(schema.settings.value, until)));
+}
+
+export async function tick(opts: { force?: boolean; deadlineMs?: number } = {}): Promise<TickResult> {
+  const lease = await acquireLock();
+  if (!lease) return { log: ["another tick is running"] };
+  try {
+    return await runTick(opts);
+  } finally {
+    await releaseLock(lease);
+  }
+}
+
+async function runTick({ force = false, deadlineMs = 240_000 } = {}): Promise<TickResult> {
   const log: string[] = [];
   const deadline = Date.now() + deadlineMs;
 
@@ -171,56 +256,116 @@ export async function tick({ force = false, deadlineMs = 240_000 } = {}): Promis
 
   const { userId, postsPerDay, graduation } = config();
   const token = await getToken(log);
-  await refreshMetrics(token, log);
 
-  // 1. Finish containers left from a previous tick.
+  try {
+    await postNext({ token, userId, postsPerDay, graduation, force, deadline, log });
+  } finally {
+    // Metrics last, so they never eat into the publishing time budget.
+    if (Date.now() < deadline) await refreshMetrics(token, log);
+  }
+  return { log };
+}
+
+async function postNext(o: {
+  token: string;
+  userId: string;
+  postsPerDay: number;
+  graduation: GraduationStrategy;
+  force: boolean;
+  deadline: number;
+  log: string[];
+}) {
+  const { token, userId, force, log } = o;
+  const inHours = insidePostingHours();
+
+  // 1. Finish containers left from a previous tick (still only inside posting hours).
   const processing = await db().select().from(variants).where(eq(variants.status, "processing"));
-  for (const v of processing) await publishFinished(token, userId, v, log);
-  if (processing.length > 0 && !force) return { log };
+  for (const v of processing) {
+    if (!v.containerId) continue; // claimed by a run that died before creating it; see below
+    if (!force && !inHours) {
+      log.push(`variant ${v.id} waiting for posting hours`);
+      continue;
+    }
+    try {
+      await publishFinished(token, userId, v, log);
+    } catch (err) {
+      const attempts = v.attempts + 1;
+      await db()
+        .update(variants)
+        .set({
+          attempts,
+          error: (err as Error).message,
+          // Give up after MAX_ATTEMPTS; check Instagram before retrying a failed one.
+          ...(attempts >= MAX_ATTEMPTS ? { status: "failed" as const } : {}),
+        })
+        .where(eq(variants.id, v.id));
+      log.push(`variant ${v.id} publish error: ${(err as Error).message}`);
+    }
+  }
+  // We hold the lock, so a claim without a container is from a run that died mid-start;
+  // nothing reached Instagram, put it back in the queue.
+  await db()
+    .update(variants)
+    .set({ status: "queued" })
+    .where(and(eq(variants.status, "processing"), isNull(variants.containerId)));
+  if (processing.length > 0 && !force) return;
 
   // 2. Start the next one if the pacing allows it.
-  if (!force && !insidePostingHours()) {
+  if (!force && !inHours) {
     log.push("outside posting hours");
-    return { log };
+    return;
   }
-  if (!force && !(await slotIsFree(postsPerDay))) {
+  if (!force && !(await slotIsFree(o.postsPerDay))) {
     log.push("no free slot");
-    return { log };
+    return;
   }
   const next = await pickNext();
   if (!next) {
     log.push("queue empty");
-    return { log };
+    return;
   }
 
+  // Claim it first, so a skip clicked meanwhile (or another run) can't be overwritten.
+  const [claimed] = await db()
+    .update(variants)
+    .set({ status: "processing", attempts: next.attempts + 1, error: null })
+    .where(and(eq(variants.id, next.id), eq(variants.status, "queued")))
+    .returning();
+  if (!claimed) {
+    log.push(`variant ${next.id} changed before it could start`);
+    return;
+  }
+
+  let containerId: string | undefined;
   try {
-    const { id: containerId } = await createTrialReelContainer({
+    ({ id: containerId } = await createTrialReelContainer({
       token,
       userId,
-      videoUrl: next.blobUrl,
-      caption: next.caption,
-      graduation,
-    });
-    await db()
-      .update(variants)
-      .set({ status: "processing", containerId, attempts: next.attempts + 1, error: null })
-      .where(eq(variants.id, next.id));
-    log.push(`variant ${next.id} container ${containerId}`);
+      videoUrl: claimed.blobUrl,
+      caption: claimed.caption,
+      graduation: o.graduation,
+    }));
+    await db().update(variants).set({ containerId }).where(eq(variants.id, claimed.id));
+    log.push(`variant ${claimed.id} container ${containerId}`);
 
     // 3. Wait for Instagram to process the video inside this invocation when possible.
-    const current = { ...next, containerId };
-    while (Date.now() + POLL_INTERVAL_MS < deadline) {
+    const current = { ...claimed, containerId };
+    while (Date.now() + POLL_INTERVAL_MS < o.deadline) {
       await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
       if (await publishFinished(token, userId, current, log)) break;
     }
   } catch (err) {
-    const attempts = next.attempts + 1;
-    await db()
-      .update(variants)
-      .set({ status: attempts >= MAX_ATTEMPTS ? "failed" : "queued", attempts, error: (err as Error).message })
-      .where(eq(variants.id, next.id));
-    log.push(`variant ${next.id} error: ${(err as Error).message}`);
+    const message = (err as Error).message;
+    if (containerId) {
+      // The container exists and may even be published; leave it in "processing"
+      // so step 1 resolves it from Instagram's own status. Never re-queue it.
+      await db().update(variants).set({ containerId, error: message }).where(eq(variants.id, claimed.id));
+    } else {
+      await db()
+        .update(variants)
+        .set({ status: claimed.attempts >= MAX_ATTEMPTS ? "failed" : "queued", error: message })
+        .where(eq(variants.id, claimed.id));
+    }
+    log.push(`variant ${claimed.id} error: ${message}`);
   }
-
-  return { log };
 }

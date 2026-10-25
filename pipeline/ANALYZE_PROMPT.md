@@ -35,7 +35,11 @@ e na próxima gravação. Roda em `~/code/reels-autopilot`.
    ```
    Quando a amostra é pequena, diz isso e sugere o que testar, em vez de inventar conclusão.
 5. Salva num arquivo temporário e roda `npm run pipeline:report -- save <arquivo>`. O painel mostra isso.
-6. Variante com resultado muito acima da média → avisa no resumo final que vale graduar no app do Instagram
+6. Sugere até 3 pautas para a próxima gravação, tiradas do que funcionou (tema, abertura, formato).
+   Escreve um JSON `[{"title": "...", "notes": "como abrir / o que mostrar"}]` (título até 140 caracteres)
+   num arquivo temporário e roda `npm run pipeline:report -- ideas <arquivo>`. Elas aparecem em "Planejado".
+   Não repete pauta que já está no painel.
+7. Variante com resultado muito acima da média → avisa no resumo final que vale graduar no app do Instagram
    (graduar não dá pela API).
 
 Nunca imprime nem copia o conteúdo de `.env.local`.
