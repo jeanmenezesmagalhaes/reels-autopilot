@@ -17,6 +17,18 @@ Plano e arquitetura: [PLAN.md](PLAN.md). Produto: [PRODUCT.md](PRODUCT.md).
    - **Resultados:** o que funcionou e o que não funcionou em 7, 30, 365 dias ou tudo.
    - Idioma (pt/en/es, pelo navegador) e tema (sistema/claro/escuro) no canto de cima.
 
+### Conectar a tua IA (Claude ou ChatGPT)
+
+A edição usa a **tua** conta e os **teus** limites, no teu Mac, com o login oficial de cada ferramenta:
+
+```bash
+npm run setup
+```
+
+O instalador abre o login do Claude no navegador (e, se quiser, o do ChatGPT como reserva), cria as pastas
+e agenda a edição de hora em hora e a análise às 05:30. O painel mostra "Editor: Claude · há X min".
+Se a pasta `01-cru` estiver vazia, nenhuma IA é chamada: não gasta teus limites.
+
 ### Sem o app do Claude aberto (opcional)
 
 `npm run pipeline:run -- edit` (ou `analyze`) roda a rotina pelo Claude Code; se o Claude bater limite

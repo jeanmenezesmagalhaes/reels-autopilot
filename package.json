@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "pipeline:report": "tsx --env-file=.env.local pipeline/report.mts",
     "pipeline:run": "tsx --env-file=.env.local pipeline/run.mts",
-    "setup:google": "tsx scripts/setup-google-login.mts"
+    "setup:google": "tsx scripts/setup-google-login.mts",
+    "setup": "tsx scripts/setup-mac.mts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.2.0",

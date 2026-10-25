@@ -47,7 +47,7 @@ export async function GET(req: Request) {
 const body = z.union([
   z.object({ learnings: z.string().min(1).max(20_000) }),
   z.object({
-    heartbeat: z.object({ provider: z.enum(["claude", "codex", "none"]), task: z.enum(["edit", "analyze"]), ok: z.boolean() }),
+    heartbeat: z.object({ provider: z.enum(["claude", "codex", "none"]), task: z.enum(["edit", "analyze", "ping"]), ok: z.boolean() }),
   }),
 ]);
 

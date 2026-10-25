@@ -23,7 +23,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const { locale, t } = await getDictionary();
   const theme = (await cookies()).get("theme")?.value ?? "system";
   const h = t.header;
-  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince, storedToken, igUserId, igUsername] = await Promise.all([
+  const [videos, variants, ideas, paused, learnings, next, nextAt, tokenFailingSince, storedToken, igUserId, igUsername, runnerRaw] = await Promise.all([
     db().select().from(schema.videos).orderBy(desc(schema.videos.createdAt)),
     db().select().from(schema.variants),
     db().select().from(schema.ideas).where(eq(schema.ideas.status, "planned")).orderBy(desc(schema.ideas.createdAt)),
@@ -35,6 +35,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     getSetting("ig_access_token"),
     getSetting("ig_user_id"),
     getSetting("ig_username"),
+    getSetting("runner"),
   ]);
   const tokenAlert = Number(tokenFailingSince) > 0 && Date.now() - Number(tokenFailingSince) > 3 * 86_400_000;
   const isPaused = paused === "true";
@@ -81,6 +82,14 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     headline = nextVideo?.title ?? "";
     detail = next ? h.next(next.label, w ? w.day : undefined) : h.waiting(waiting);
   }
+  // Which AI edits on the creator's Mac, reported by `npm run pipeline:run`.
+  const runner = runnerRaw ? (JSON.parse(runnerRaw) as { provider: string; ok: boolean; at: number }) : undefined;
+  const aiName = runner?.provider === "codex" ? "ChatGPT" : runner?.provider === "claude" ? "Claude" : undefined;
+  const editorLine =
+    runner && aiName
+      ? h.editor(aiName, new Intl.RelativeTimeFormat(t.intl, { numeric: "auto" }).format(-Math.round((Date.now() - runner.at) / 60000), "minute"))
+      : h.editorNone;
+
   const canControl = igReady && waiting > 0 && !publishing;
   const navStatus = !igReady ? h.igMissingShort : `@${igUsername} · ${isPaused ? h.paused : h.running(postsPerDay)}`;
 
@@ -91,7 +100,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <h1 className="text-[17px] font-semibold tracking-tight">Reels Autopilot</h1>
           <div className="flex items-center gap-5">
             <p className="hidden text-sm text-ink-muted sm:block">{navStatus}</p>
-            <Settings locale={locale} theme={theme} igConnected={igReady} />
+            <Settings locale={locale} theme={theme} igConnected={igReady} editorLine={editorLine} />
           </div>
         </div>
       </header>
@@ -160,7 +169,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
         {view === "resultados" ? (
           <Results t={t} period={period} videos={videos} variants={variants} learnings={learnings} />
         ) : (
-          <Board t={t} ideas={ideas} videos={videos} variants={variants} nextVariantId={next?.id} nextAt={isPaused ? undefined : nextAt} />
+          <Board t={t} editorHint={runner ? undefined : h.editorHint} ideas={ideas} videos={videos} variants={variants} nextVariantId={next?.id} nextAt={isPaused ? undefined : nextAt} />
         )}
       </main>
     </>
@@ -170,7 +179,17 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 const THEMES = ["system", "light", "dark"] as const;
 
 // Language and theme: two segmented controls behind one disclosure, no settings page.
-function Settings({ locale, theme, igConnected }: { locale: keyof typeof dictionaries; theme: string; igConnected: boolean }) {
+function Settings({
+  locale,
+  theme,
+  igConnected,
+  editorLine,
+}: {
+  locale: keyof typeof dictionaries;
+  theme: string;
+  igConnected: boolean;
+  editorLine: string;
+}) {
   const t = dictionaries[locale];
   const current = (THEMES as readonly string[]).includes(theme) ? (theme as (typeof THEMES)[number]) : "system";
   const group = "flex rounded-full bg-ground-raised p-1";
@@ -185,6 +204,7 @@ function Settings({ locale, theme, igConnected }: { locale: keyof typeof diction
         </span>
       </summary>
       <div className="absolute right-0 z-10 mt-2 flex flex-col gap-2 rounded-2xl border border-rule bg-ground p-2 shadow-[0_10px_30px_rgba(0,0,0,0.12)]">
+        <p className="px-3 pt-1 text-sm text-ink-muted">{editorLine}</p>
         <div className={group} role="group" aria-label={t.language}>
           {LOCALES.map((l) => (
             <form key={l} action={setPreference.bind(null, "lang", l)}>

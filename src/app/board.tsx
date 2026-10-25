@@ -7,11 +7,11 @@ import { addIdea, setIdeaStatus, setVariantStatus } from "./actions";
 
 const DAY = 86_400_000;
 
-type Props = { t: Dictionary; ideas: Idea[]; videos: Video[]; variants: Variant[]; nextVariantId?: number; nextAt?: Date };
+type Props = { t: Dictionary; editorHint?: string; ideas: Idea[]; videos: Video[]; variants: Variant[]; nextVariantId?: number; nextAt?: Date };
 
 // Content lifecycle as a Kanban: Planejado → Em edição → Na fila → Publicado.
 // The system moves cards on its own; Jean only adds ideas and marks them recorded.
-export function Board({ t, ideas, videos, variants, nextVariantId, nextAt }: Props) {
+export function Board({ t, editorHint, ideas, videos, variants, nextVariantId, nextAt }: Props) {
   const b = t.board;
   const byVideo = new Map<number, Variant[]>();
   for (const v of [...variants].sort((a, b) => a.id - b.id)) {
@@ -70,6 +70,7 @@ export function Board({ t, ideas, videos, variants, nextVariantId, nextAt }: Pro
 
       <Column title={b.editing} count={editing.length}>
         {editing.length === 0 && <Empty>{b.editingEmpty}</Empty>}
+        {editorHint && <p className="text-[15px] text-busy">{editorHint}</p>}
         {editing.map((video) => (
           <Card key={video.id}>
             <p className="font-semibold">{video.title}</p>

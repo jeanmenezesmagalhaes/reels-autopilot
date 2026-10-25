@@ -10,6 +10,7 @@ Pastas (`REELS_DIR`, default `~/Movies/ReelsAutopilot`):
 
 ## Passos
 
+0. Sempre, antes de tudo: `npm run -s pipeline:run -- ping` (avisa o painel que o editor está ativo).
 1. Lista `01-cru/` (`.mov`, `.mp4`, `.m4v`). Nada novo e nada em `02-editando/` → para aqui, sem fazer mais nada.
 2. Pega **um** vídeo (o mais antigo). Ignora arquivo modificado há menos de 2 min (ainda copiando).
    Move para `02-editando/<slug>/source.<ext>`. Slug: `aaaa-mm-dd-tema-curto`, só `[a-z0-9-]`.
