@@ -24,6 +24,15 @@ export default async function LoginPage({ searchParams }: { searchParams: Search
         ) : (
           <LoginForm copy={{ password: c.password, submit: c.submit, submitting: c.submitting, wrong: c.wrong, locked: c.locked }} />
         )}
+        <p className="mt-6 text-center text-sm text-ink-muted">
+          <a href="/privacidade" className="hover:text-ink hover:underline">
+            {c.privacy}
+          </a>
+          {" · "}
+          <a href="/termos" className="hover:text-ink hover:underline">
+            {c.terms}
+          </a>
+        </p>
         {notice && (
           <p role="status" className={`mt-4 text-center text-[15px] ${params.erro ? "text-bad" : "text-ink-muted"}`}>
             {notice}

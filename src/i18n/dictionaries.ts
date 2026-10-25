@@ -39,6 +39,8 @@ const pt = {
     google: "Continuar com Google",
     googleError: "Não deu para entrar com o Google. Tenta de novo.",
     deleted: "Teus dados foram excluídos.",
+    privacy: "Privacidade",
+    terms: "Termos",
   },
   waitlist: {
     title: (name: string) => (name ? `Obrigado, ${name.split(" ")[0]}.` : "Obrigado."),
@@ -143,6 +145,8 @@ const en: Dictionary = {
     google: "Continue with Google",
     googleError: "Couldn't sign in with Google. Try again.",
     deleted: "Your data was deleted.",
+    privacy: "Privacy",
+    terms: "Terms",
   },
   waitlist: {
     title: (name) => (name ? `Thanks, ${name.split(" ")[0]}.` : "Thanks."),
@@ -245,6 +249,8 @@ const es: Dictionary = {
     google: "Continuar con Google",
     googleError: "No se pudo entrar con Google. Intenta de nuevo.",
     deleted: "Tus datos fueron eliminados.",
+    privacy: "Privacidad",
+    terms: "Términos",
   },
   waitlist: {
     title: (name) => (name ? `Gracias, ${name.split(" ")[0]}.` : "Gracias."),
