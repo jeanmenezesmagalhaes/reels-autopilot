@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Idea, Variant, Video } from "@/db/schema";
 import { Chevron } from "@/components/chevron";
+import { Disclosure } from "@/components/disclosure";
 import { SubmitButton } from "@/components/submit-button";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { formatNumber, retention, statusTone, when } from "@/lib/format";
@@ -174,11 +175,16 @@ function Empty({ children }: { children: React.ReactNode }) {
 function Variants({ t, rows, readOnly = false }: { t: Dictionary; rows: Variant[]; readOnly?: boolean }) {
   const b = t.board;
   return (
-    <details className="group mt-2">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden">
-        <Chevron />
-        {b.versions(rows.length)}
-      </summary>
+    <Disclosure
+      className="group mt-2"
+      summaryClassName="flex cursor-pointer list-none items-center gap-1.5 text-sm font-medium text-ink-muted hover:text-ink [&::-webkit-details-marker]:hidden"
+      summary={
+        <>
+          <Chevron />
+          {b.versions(rows.length)}
+        </>
+      }
+    >
       <ul className="mt-2 divide-y divide-rule">
         {rows.map((v) => {
           const r = retention(v);
@@ -214,6 +220,6 @@ function Variants({ t, rows, readOnly = false }: { t: Dictionary; rows: Variant[
           );
         })}
       </ul>
-    </details>
+    </Disclosure>
   );
 }

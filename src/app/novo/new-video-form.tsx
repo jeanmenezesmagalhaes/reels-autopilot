@@ -25,7 +25,18 @@ type Copy = {
 const field = "w-full rounded-2xl border border-rule bg-ground px-4 py-3 text-[15px] placeholder:text-ink-muted focus:border-ink focus:outline-none";
 
 // Uploads the raw video straight from the browser to Blob, then saves the brief.
-export function NewVideoForm({ copy, ideas }: { copy: Copy; ideas: { id: number; title: string }[] }) {
+export function NewVideoForm({
+  copy,
+  ideas,
+  uploadPrefix,
+  next = "/",
+}: {
+  copy: Copy;
+  ideas: { id: number; title: string }[];
+  uploadPrefix: string;
+  // Where to go once the video is saved (the first-run flow goes on to its last step).
+  next?: string;
+}) {
   const router = useRouter();
   const [progress, setProgress] = useState<number | null>(null);
   const [state, setState] = useState<"idle" | "saving" | "error">("idle");
@@ -39,7 +50,7 @@ export function NewVideoForm({ copy, ideas }: { copy: Copy; ideas: { id: number;
     try {
       setProgress(0);
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
-      const blob = await upload(`uploads/raw.${ext}`, file, {
+      const blob = await upload(`${uploadPrefix}raw.${ext}`, file, {
         access: "public",
         handleUploadUrl: "/api/upload",
         multipart: true,
@@ -54,7 +65,7 @@ export function NewVideoForm({ copy, ideas }: { copy: Copy; ideas: { id: number;
         rawUrl: blob.url,
         ideaId,
       });
-      router.push("/");
+      router.push(next);
     } catch {
       setState("error");
       setProgress(null);

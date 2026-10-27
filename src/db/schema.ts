@@ -1,4 +1,5 @@
-import { integer, pgEnum, pgTable, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { integer, pgEnum, pgTable, primaryKey, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const variantStatus = pgEnum("variant_status", [
   "queued", // waiting for its turn
@@ -9,13 +10,51 @@ export const variantStatus = pgEnum("variant_status", [
   "revision", // creator asked to redo this version; the Mac editor picks it up
 ]);
 
+// Everything a creator owns hangs off one workspace: ideas, videos, versions,
+// connected accounts and their settings. Each person gets one when they get access;
+// the people never see the word. Business workspaces will add more members later.
+export const workspaces = pgTable("workspaces", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+const workspaceId = () =>
+  integer("workspace_id")
+    .notNull()
+    .references(() => workspaces.id, { onDelete: "cascade" });
+
+// People who signed in with Google. "member" opens their own dashboard; everyone
+// else waits on the early-access list until an admin lets them in.
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull().unique(),
+  name: text("name"),
+  role: text("role").notNull().default("waitlist"), // "member" | "waitlist"
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const members = pgTable(
+  "members",
+  {
+    workspaceId: workspaceId(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("owner"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })],
+);
+
 // Connected accounts: Instagram profiles (to post) and AI providers (to edit/analyse).
-// Secrets are AES-GCM encrypted (lib/secrets). `ownerId` is null for the personal
-// workspace; business workspaces will scope rows per brand/creator.
+// Secrets are AES-GCM encrypted (lib/secrets).
 export const connections = pgTable(
   "connections",
   {
     id: serial("id").primaryKey(),
+    workspaceId: workspaceId(),
     kind: text("kind").notNull(), // "instagram" | "llm"
     provider: text("provider").notNull(), // instagram | anthropic | openai | google
     method: text("method").notNull(), // "oauth" | "api_key"
@@ -25,54 +64,54 @@ export const connections = pgTable(
     priority: integer("priority").notNull().default(0), // 0 = principal / first to try
     status: text("status").notNull().default("ok"), // "ok" | "error"
     statusDetail: text("status_detail"),
-    ownerId: integer("owner_id"),
     checkedAt: timestamp("checked_at", { withTimezone: true }).defaultNow().notNull(),
     refreshedAt: timestamp("refreshed_at", { withTimezone: true }).defaultNow().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [uniqueIndex("connections_provider_external").on(t.provider, t.externalId)],
+  (t) => [
+    uniqueIndex("connections_workspace_provider_external").on(t.workspaceId, t.provider, t.externalId),
+    // An Instagram account posts from one dashboard only.
+    uniqueIndex("connections_instagram_once").on(t.externalId).where(sql`${t.kind} = 'instagram'`),
+  ],
 );
-
-// People who signed in with Google. "owner" opens the dashboard; everyone else is on
-// the early-access waitlist until the multi-user version ships.
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  email: text("email").notNull().unique(),
-  name: text("name"),
-  role: text("role").notNull().default("waitlist"), // "owner" | "waitlist"
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-  lastLoginAt: timestamp("last_login_at", { withTimezone: true }).defaultNow().notNull(),
-});
 
 export const ideaStatus = pgEnum("idea_status", ["planned", "recorded", "dropped"]);
 
-// Kanban "Planejado": recording ideas from Jean or suggested by the analysis routine.
+// Kanban "Planejado": recording ideas from the creator or suggested by the analysis routine.
 export const ideas = pgTable("ideas", {
   id: serial("id").primaryKey(),
+  workspaceId: workspaceId(),
   title: text("title").notNull(),
   notes: text("notes"),
-  source: text("source").notNull().default("jean"), // "jean" | "analise"
+  source: text("source").notNull().default("jean"), // "jean" (the creator) | "analise"
   status: ideaStatus("status").notNull().default("planned"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // A video with no variants yet is still being edited on the Mac.
-export const videos = pgTable("videos", {
-  id: serial("id").primaryKey(),
-  slug: text("slug").notNull().unique(),
-  title: text("title").notNull(),
-  sourceFile: text("source_file"),
-  // What the creator asked for before editing.
-  brief: text("brief"),
-  baseCaption: text("base_caption"),
-  // Uploaded from the dashboard: waits here until the Mac editor downloads it.
-  rawUrl: text("raw_url"),
-  stage: text("stage").notNull().default("editing"), // "uploaded" | "editing"
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+export const videos = pgTable(
+  "videos",
+  {
+    id: serial("id").primaryKey(),
+    workspaceId: workspaceId(),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    sourceFile: text("source_file"),
+    // What the creator asked for before editing.
+    brief: text("brief"),
+    baseCaption: text("base_caption"),
+    // Uploaded from the dashboard: waits here until the Mac editor downloads it.
+    rawUrl: text("raw_url"),
+    stage: text("stage").notNull().default("editing"), // "uploaded" | "editing"
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [uniqueIndex("videos_workspace_slug").on(t.workspaceId, t.slug)],
+);
 
 export const variants = pgTable("variants", {
   id: serial("id").primaryKey(),
+  // Same as the video's; kept here so the scheduler filters versions without a join.
+  workspaceId: workspaceId(),
   videoId: integer("video_id")
     .notNull()
     .references(() => videos.id, { onDelete: "cascade" }),
@@ -105,7 +144,7 @@ export const variants = pgTable("variants", {
 
 // One row per Instagram account per day (creator's timezone), written by the cron tick
 // and by opening Perfil. The API only knows today's totals, so growth over a period
-// comes from these rows.
+// comes from these rows. Keyed by the Instagram account, which belongs to one workspace.
 export const profileSnapshots = pgTable(
   "profile_snapshots",
   {
@@ -120,7 +159,20 @@ export const profileSnapshots = pgTable(
   (t) => [uniqueIndex("profile_snapshots_user_day").on(t.igUserId, t.day)],
 );
 
-// Key/value store: ig_access_token, ig_token_refreshed_at, paused, learnings
+// Per-workspace key/value: paused, learnings, runner, analysis_at, demo_dismissed,
+// onboarding_hidden.
+export const workspaceSettings = pgTable(
+  "workspace_settings",
+  {
+    workspaceId: workspaceId(),
+    key: text("key").notNull(),
+    value: text("value").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.key] })],
+);
+
+// Server-wide key/value: login_failures, pipeline_workspace, tick leases.
 export const settings = pgTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),

@@ -1,8 +1,10 @@
 import { del } from "@vercel/blob";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
-import { db, getSetting, schema } from "@/db";
+import { db, getWorkspaceSetting, schema } from "@/db";
 import type { Variant } from "@/db/schema";
 import { maybeAnalyze } from "./analysis";
+import { ANALYSIS_TIMEOUT_MS } from "./llm";
+import { hourInPostingZone, POST_HOURS, projectSlots } from "./projection";
 import { getIgAccount, markIgStatus, saveIgToken } from "./instagram-account";
 import {
   createTrialReelContainer,
@@ -19,8 +21,6 @@ const { variants } = schema;
 const MAX_ATTEMPTS = 3;
 const TOKEN_REFRESH_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
 const POLL_INTERVAL_MS = 10_000;
-// Only post between 08:00 and 22:59 Brasília time.
-const POST_HOURS = { from: 8, to: 22, timeZone: "America/Sao_Paulo" };
 const METRICS_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const METRICS_STALE_MS = 6 * 60 * 60 * 1000;
 
@@ -81,13 +81,14 @@ async function publishFinished(token: string, userId: string, v: Variant, log: s
   return true;
 }
 
-async function refreshMetrics(token: string, log: string[]) {
+async function refreshMetrics(workspaceId: number, token: string, deadline: number, log: string[]) {
   const now = Date.now();
   const due = await db()
     .select()
     .from(variants)
     .where(
       and(
+        eq(variants.workspaceId, workspaceId),
         eq(variants.status, "published"),
         isNotNull(variants.mediaId),
         gte(variants.publishedAt, new Date(now - METRICS_WINDOW_MS)),
@@ -96,6 +97,7 @@ async function refreshMetrics(token: string, log: string[]) {
     )
     .limit(15);
   for (const v of due) {
+    if (Date.now() + 30_000 > deadline) break;
     try {
       const m = await getReelInsights(token, v.mediaId!);
       await db()
@@ -118,52 +120,33 @@ async function refreshMetrics(token: string, log: string[]) {
   if (due.length) log.push(`metrics refreshed for ${due.length}`);
 }
 
-function hourInPostingZone(date: Date) {
-  return Number(
-    new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: POST_HOURS.timeZone }).format(date),
-  );
-}
-
 function insidePostingHours() {
   const hour = hourInPostingZone(new Date());
   return hour >= POST_HOURS.from && hour <= POST_HOURS.to;
 }
 
-// Best guess of when the next post goes out, for the dashboard. Walks forward
-// hour by hour (the tick runs hourly at :23) until pacing and posting hours allow it.
-export async function estimateNextPostAt() {
+// Best guess of when the next post goes out, for the dashboard.
+export async function estimateNextPostAt(workspaceId: number) {
   const postsPerDay = Math.max(1, Number(process.env.POSTS_PER_DAY ?? 2));
-  const dayMs = 24 * 60 * 60 * 1000;
-  const minGapMs = (dayMs / postsPerDay) * 0.8;
   const recent = await db()
     .select({ at: variants.publishedAt })
     .from(variants)
-    .where(and(eq(variants.status, "published"), gte(variants.publishedAt, new Date(Date.now() - dayMs))))
-    .orderBy(asc(variants.publishedAt));
-  const times = recent.map((r) => r.at!.getTime());
-
-  const t = new Date();
-  t.setUTCMinutes(23, 0, 0);
-  if (t.getTime() < Date.now()) t.setTime(t.getTime() + 60 * 60 * 1000);
-  for (let i = 0; i < 72; i++, t.setTime(t.getTime() + 60 * 60 * 1000)) {
-    const now = t.getTime();
-    const hour = hourInPostingZone(t);
-    if (hour < POST_HOURS.from || hour > POST_HOURS.to) continue;
-    const inWindow = times.filter((x) => now - x < dayMs);
-    if (inWindow.length >= postsPerDay) continue;
-    const last = times.at(-1);
-    if (last !== undefined && now - last < minGapMs) continue;
-    return new Date(now);
-  }
-  return undefined;
+    .where(
+      and(
+        eq(variants.workspaceId, workspaceId),
+        eq(variants.status, "published"),
+        gte(variants.publishedAt, new Date(Date.now() - 24 * 60 * 60 * 1000)),
+      ),
+    );
+  return projectSlots(1, recent.map((r) => r.at!.getTime()), postsPerDay)[0];
 }
 
 // Round-robin: next variant comes from the video that went longest without a post.
-export async function pickNext() {
+export async function pickNext(workspaceId: number) {
   const queued = await db()
     .select()
     .from(variants)
-    .where(eq(variants.status, "queued"))
+    .where(and(eq(variants.workspaceId, workspaceId), eq(variants.status, "queued")))
     .orderBy(asc(variants.id));
   if (queued.length === 0) return undefined;
 
@@ -178,12 +161,12 @@ export async function pickNext() {
   return queued.sort((a, b) => (lastAt.get(a.videoId) ?? 0) - (lastAt.get(b.videoId) ?? 0) || a.id - b.id)[0];
 }
 
-async function slotIsFree(postsPerDay: number) {
+async function slotIsFree(workspaceId: number, postsPerDay: number) {
   const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const [{ count }] = await db()
     .select({ count: sql<number>`count(*)::int` })
     .from(variants)
-    .where(and(eq(variants.status, "published"), gte(variants.publishedAt, dayAgo)));
+    .where(and(eq(variants.workspaceId, workspaceId), eq(variants.status, "published"), gte(variants.publishedAt, dayAgo)));
   if (count >= postsPerDay) return false;
 
   // Keep posts spread out; 0.8 tolerates cron jitter.
@@ -191,64 +174,91 @@ async function slotIsFree(postsPerDay: number) {
   const [latest] = await db()
     .select({ at: variants.publishedAt })
     .from(variants)
-    .where(isNotNull(variants.publishedAt))
+    .where(and(eq(variants.workspaceId, workspaceId), isNotNull(variants.publishedAt)))
     .orderBy(sql`${variants.publishedAt} desc`)
     .limit(1);
   return !latest?.at || Date.now() - latest.at.getTime() >= minGapMs;
 }
 
 // Vercel cron, GitHub Actions and the "Post now" button can fire at the same time.
-// A lease row in `settings` makes sure only one tick runs; it expires on its own if a
-// run dies, so a crash never blocks posting for more than LOCK_MS.
-const LOCK_KEY = "tick_lock";
+// A lease row per workspace in `settings` makes sure only one tick runs for it; it
+// expires on its own if a run dies, so a crash never blocks posting for more than LOCK_MS.
 const LOCK_MS = 6 * 60 * 1000;
+const lockKey = (workspaceId: number) => `tick_lock:${workspaceId}`;
 
 // Returns the lease value we wrote, so release only frees our own lease.
-async function acquireLock() {
+async function acquireLock(workspaceId: number) {
+  const key = lockKey(workspaceId);
   const now = Date.now();
   const until = String(now + LOCK_MS);
   const inserted = await db()
     .insert(schema.settings)
-    .values({ key: LOCK_KEY, value: until })
+    .values({ key, value: until })
     .onConflictDoNothing()
     .returning({ key: schema.settings.key });
   if (inserted.length) return until;
   const taken = await db()
     .update(schema.settings)
     .set({ value: until, updatedAt: new Date() })
-    .where(and(eq(schema.settings.key, LOCK_KEY), sql`${schema.settings.value}::bigint < ${now}`))
+    .where(and(eq(schema.settings.key, key), sql`${schema.settings.value}::bigint < ${now}`))
     .returning({ key: schema.settings.key });
   return taken.length > 0 ? until : undefined;
 }
 
-async function releaseLock(until: string) {
+async function releaseLock(workspaceId: number, until: string) {
   await db()
     .update(schema.settings)
     .set({ value: "0" })
-    .where(and(eq(schema.settings.key, LOCK_KEY), eq(schema.settings.value, until)));
+    .where(and(eq(schema.settings.key, lockKey(workspaceId)), eq(schema.settings.value, until)));
 }
 
-export async function tick(opts: { force?: boolean; deadlineMs?: number } = {}): Promise<TickResult> {
-  const lease = await acquireLock();
-  if (!lease) return { log: ["another tick is running"] };
-  try {
-    return await runTick(opts);
-  } finally {
-    await releaseLock(lease);
+// One workspace ("Post now"), or every workspace (cron). The time budget is shared:
+// each workspace gets an even slice of what is left, and the starting point rotates
+// every hour so a long list never leaves the same people waiting.
+export async function tick(opts: { workspaceId?: number; force?: boolean; deadlineMs?: number } = {}): Promise<TickResult> {
+  const deadline = Date.now() + (opts.deadlineMs ?? 240_000);
+  let ids: number[];
+  if (opts.workspaceId) ids = [opts.workspaceId];
+  else {
+    const all = (await db().select({ id: schema.workspaces.id }).from(schema.workspaces).orderBy(asc(schema.workspaces.id))).map((w) => w.id);
+    const start = all.length ? Math.floor(Date.now() / 3_600_000) % all.length : 0;
+    ids = [...all.slice(start), ...all.slice(0, start)];
   }
+  const log: string[] = [];
+  for (const [i, workspaceId] of ids.entries()) {
+    const left = deadline - Date.now();
+    if (left < 15_000) {
+      log.push(`[${workspaceId}] skipped: out of time`);
+      continue;
+    }
+    const lease = await acquireLock(workspaceId);
+    if (!lease) {
+      log.push(`[${workspaceId}] another tick is running`);
+      continue;
+    }
+    const slice = Math.floor(left / (ids.length - i));
+    try {
+      const result = await runTick(workspaceId, { force: opts.force, deadline: Date.now() + slice });
+      log.push(...result.log.map((l) => `[${workspaceId}] ${l}`));
+    } catch (err) {
+      log.push(`[${workspaceId}] error: ${(err as Error).message}`);
+    } finally {
+      await releaseLock(workspaceId, lease);
+    }
+  }
+  return { log };
 }
 
-async function runTick({ force = false, deadlineMs = 240_000 } = {}): Promise<TickResult> {
+async function runTick(workspaceId: number, { force = false, deadline }: { force?: boolean; deadline: number }): Promise<TickResult> {
   const log: string[] = [];
-  const deadline = Date.now() + deadlineMs;
 
-  if ((await getSetting("paused")) === "true") {
+  if ((await getWorkspaceSetting(workspaceId, "paused")) === "true") {
     log.push("paused");
     return { log };
   }
 
   const { postsPerDay, graduation } = config();
-  const account = await getIgAccount();
+  const account = await getIgAccount(workspaceId);
   if (!account) {
     log.push("instagram not connected");
     return { log };
@@ -257,16 +267,18 @@ async function runTick({ force = false, deadlineMs = 240_000 } = {}): Promise<Ti
   const token = await getToken(account, log);
 
   try {
-    await postNext({ token, userId, postsPerDay, graduation, force, deadline, log });
+    await postNext({ workspaceId, token, userId, postsPerDay, graduation, force, deadline, log });
   } finally {
     // Metrics and analysis last, so they never eat into the publishing time budget.
-    if (Date.now() < deadline) await refreshMetrics(token, log);
-    if (Date.now() < deadline) await maybeAnalyze(log);
+    if (Date.now() < deadline) await refreshMetrics(workspaceId, token, deadline, log);
+    // Only start an analysis that can finish inside this workspace's slice.
+    if (Date.now() + ANALYSIS_TIMEOUT_MS + 5_000 < deadline) await maybeAnalyze(workspaceId, log);
   }
   return { log };
 }
 
 async function postNext(o: {
+  workspaceId: number;
   token: string;
   userId: string;
   postsPerDay: number;
@@ -275,11 +287,14 @@ async function postNext(o: {
   deadline: number;
   log: string[];
 }) {
-  const { token, userId, force, log } = o;
+  const { workspaceId, token, userId, force, log } = o;
   const inHours = insidePostingHours();
 
   // 1. Finish containers left from a previous tick (still only inside posting hours).
-  const processing = await db().select().from(variants).where(eq(variants.status, "processing"));
+  const processing = await db()
+    .select()
+    .from(variants)
+    .where(and(eq(variants.workspaceId, workspaceId), eq(variants.status, "processing")));
   for (const v of processing) {
     if (!v.containerId) continue; // claimed by a run that died before creating it; see below
     if (!force && !inHours) {
@@ -307,7 +322,7 @@ async function postNext(o: {
   await db()
     .update(variants)
     .set({ status: "queued" })
-    .where(and(eq(variants.status, "processing"), isNull(variants.containerId)));
+    .where(and(eq(variants.workspaceId, workspaceId), eq(variants.status, "processing"), isNull(variants.containerId)));
   if (processing.length > 0 && !force) return;
 
   // 2. Start the next one if the pacing allows it.
@@ -315,11 +330,11 @@ async function postNext(o: {
     log.push("outside posting hours");
     return;
   }
-  if (!force && !(await slotIsFree(o.postsPerDay))) {
+  if (!force && !(await slotIsFree(workspaceId, o.postsPerDay))) {
     log.push("no free slot");
     return;
   }
-  const next = await pickNext();
+  const next = await pickNext(workspaceId);
   if (!next) {
     log.push("queue empty");
     return;

@@ -46,10 +46,14 @@ export async function validateKey(provider: LlmProvider, key: string) {
   }
 }
 
+// The cron tick has a hard time limit; an analysis that runs longer is dropped and
+// tried again on a later tick.
+export const ANALYSIS_TIMEOUT_MS = 100_000;
+
 async function callProvider(provider: LlmProvider, key: string, system: string, prompt: string): Promise<string> {
   switch (provider) {
     case "anthropic": {
-      const client = new Anthropic({ apiKey: key });
+      const client = new Anthropic({ apiKey: key, timeout: ANALYSIS_TIMEOUT_MS, maxRetries: 0 });
       const res = await client.beta.messages.create({
         model: MODELS.anthropic,
         max_tokens: 16000,
@@ -67,6 +71,7 @@ async function callProvider(provider: LlmProvider, key: string, system: string, 
       const json = await ok(
         await fetch("https://api.openai.com/v1/chat/completions", {
           method: "POST",
+          signal: AbortSignal.timeout(ANALYSIS_TIMEOUT_MS),
           headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
           body: JSON.stringify({
             model: MODELS[provider],
@@ -84,6 +89,7 @@ async function callProvider(provider: LlmProvider, key: string, system: string, 
       const json = await ok(
         await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${MODELS.google}:generateContent`, {
           method: "POST",
+          signal: AbortSignal.timeout(ANALYSIS_TIMEOUT_MS),
           headers: { "x-goog-api-key": key, "content-type": "application/json" },
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: system }] },
@@ -97,21 +103,21 @@ async function callProvider(provider: LlmProvider, key: string, system: string, 
   }
 }
 
-export async function listLlmConnections() {
+export async function listLlmConnections(workspaceId: number) {
   return db()
     .select()
     .from(connections)
-    .where(eq(connections.kind, "llm"))
+    .where(and(eq(connections.workspaceId, workspaceId), eq(connections.kind, "llm")))
     .orderBy(asc(connections.priority), asc(connections.id));
 }
 
-export async function hasLlm() {
-  return (await listLlmConnections()).length > 0;
+export async function hasLlm(workspaceId: number) {
+  return (await listLlmConnections(workspaceId)).length > 0;
 }
 
 // Tries each connected AI in order; a failing one is marked and skipped.
-export async function complete(system: string, prompt: string) {
-  const rows = await listLlmConnections();
+export async function complete(workspaceId: number, system: string, prompt: string) {
+  const rows = await listLlmConnections(workspaceId);
   if (!rows.length) throw new Error("no AI connected");
   const errors: string[] = [];
   for (const row of rows) {
@@ -129,8 +135,8 @@ export async function complete(system: string, prompt: string) {
   throw new Error(`all AIs failed: ${errors.join("; ")}`);
 }
 
-export async function saveLlmKey(provider: LlmProvider, key: string) {
-  const rows = await listLlmConnections();
+export async function saveLlmKey(workspaceId: number, provider: LlmProvider, key: string) {
+  const rows = await listLlmConnections(workspaceId);
   const existing = rows.find((r) => r.provider === provider);
   const values = {
     kind: "llm",
@@ -145,15 +151,17 @@ export async function saveLlmKey(provider: LlmProvider, key: string) {
     refreshedAt: new Date(),
   };
   if (existing) await db().update(connections).set(values).where(eq(connections.id, existing.id));
-  else await db().insert(connections).values({ ...values, priority: rows.length });
+  else await db().insert(connections).values({ ...values, workspaceId, priority: rows.length });
 }
 
-export async function removeLlm(id: number) {
-  await db().delete(connections).where(and(eq(connections.id, id), eq(connections.kind, "llm")));
+export async function removeLlm(workspaceId: number, id: number) {
+  await db()
+    .delete(connections)
+    .where(and(eq(connections.id, id), eq(connections.workspaceId, workspaceId), eq(connections.kind, "llm")));
 }
 
-export async function moveLlm(id: number, direction: "up" | "down") {
-  const rows = await listLlmConnections();
+export async function moveLlm(workspaceId: number, id: number, direction: "up" | "down") {
+  const rows = await listLlmConnections(workspaceId);
   const i = rows.findIndex((r) => r.id === id);
   const j = direction === "up" ? i - 1 : i + 1;
   if (i < 0 || j < 0 || j >= rows.length) return;
@@ -162,7 +170,7 @@ export async function moveLlm(id: number, direction: "up" | "down") {
 }
 
 // The Mac editor can use a connected Claude key when the creator has no Claude login there.
-export async function anthropicKeyForEditor() {
-  const row = (await listLlmConnections()).find((r) => r.provider === "anthropic");
+export async function anthropicKeyForEditor(workspaceId: number) {
+  const row = (await listLlmConnections(workspaceId)).find((r) => r.provider === "anthropic");
   return row ? decryptSecret(row.secret) : undefined;
 }

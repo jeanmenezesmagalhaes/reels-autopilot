@@ -11,8 +11,10 @@ Plano e arquitetura: [PLAN.md](PLAN.md). Produto: [PRODUCT.md](PRODUCT.md).
 2. Pronto. A cada hora o Claude edita (tarefa "Reels Autopilot: editar vídeos novos") e manda para a fila.
 3. A fila posta só como **Trial Reel**, entre 08h e 22h, `POSTS_PER_DAY` por dia, alternando vídeos.
 4. Todo dia 05:30 o Claude analisa os resultados, escreve "O que fazer a seguir" e sugere pautas.
-5. Painel: https://reels-autopilot-bay.vercel.app → **Continuar com Google**. A primeira conta que entra vira a dona do painel
-   (ou quem estiver em `OWNER_EMAILS`); qualquer outra conta cai na lista de espera e pode excluir os próprios dados.
+5. Painel: https://reels-autopilot-bay.vercel.app → **Continuar com Google**. A primeira conta que entra configura o app e vira admin
+   (ou quem estiver em `ADMIN_EMAILS`); qualquer outra conta cai na lista de espera. O admin libera cada pessoa em
+   **Ajustes → Lista de espera**, e ela ganha o próprio painel, separado dos outros, na próxima vez que abrir o site.
+   Cada pessoa pode excluir a própria conta em Ajustes.
    Sessão dura 30 dias; "Sair" fica no menu de idioma/tema. Enquanto o Google não estiver configurado, a tela pede a senha `DASHBOARD_PASSWORD`.
    - **Quadro:** Planejado → Em edição → Na fila → Publicado. Clica num conteúdo para ver cada versão e:
      editar a legenda, **refazer com instruções** (ex.: outro formato de legenda) ou **cancelar a publicação**.

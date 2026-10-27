@@ -25,8 +25,8 @@ async function saveSnapshot(igUserId: string, p: IgProfile) {
 }
 
 // Cron: one snapshot per connected account per day.
-export async function snapshotProfiles(log: string[]) {
-  for (const a of await listInstagramAccounts()) {
+export async function snapshotProfiles(workspaceId: number, log: string[]) {
+  for (const a of await listInstagramAccounts(workspaceId)) {
     try {
       await saveSnapshot(a.externalId, await getProfile(decryptSecret(a.secret)));
     } catch (err) {
@@ -67,7 +67,9 @@ export async function loadProfile(account: Connection, isPrincipal: boolean, day
       ? db()
           .select({ id: variants.id })
           .from(variants)
-          .where(and(eq(variants.status, "published"), gte(variants.publishedAt, since)))
+          .where(
+            and(eq(variants.workspaceId, account.workspaceId), eq(variants.status, "published"), gte(variants.publishedAt, since)),
+          )
       : Promise.resolve([]),
   ]);
 

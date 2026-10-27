@@ -29,7 +29,7 @@ async function call<T>(
   } else {
     body = new URLSearchParams(init.params);
   }
-  const res = await fetch(url, { method, headers, body, cache: "no-store" });
+  const res = await fetch(url, { method, headers, body, cache: "no-store", signal: AbortSignal.timeout(30_000) });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || json.error) {
     const msg = json.error?.error_user_msg ?? json.error?.message ?? `HTTP ${res.status}`;

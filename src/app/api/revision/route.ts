@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { hasBearer } from "@/lib/auth";
+import { pipelineWorkspace } from "@/lib/workspace";
 import { isOwnBlobUrl } from "@/lib/blob-host";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,8 @@ const body = z.object({
 
 // The Mac editor finished a redo: swap in the new file and caption, back to the queue.
 export async function POST(req: Request) {
-  if (!hasBearer(req, process.env.PIPELINE_SECRET)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const workspaceId = await pipelineWorkspace(req);
+  if (!workspaceId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: z.prettifyError(parsed.error) }, { status: 400 });
   const { slug, label, blobUrl, caption, durationS } = parsed.data;
@@ -26,7 +27,14 @@ export async function POST(req: Request) {
     .select({ id: schema.variants.id, oldUrl: schema.variants.blobUrl })
     .from(schema.variants)
     .innerJoin(schema.videos, eq(schema.variants.videoId, schema.videos.id))
-    .where(and(eq(schema.videos.slug, slug), eq(schema.variants.label, label), eq(schema.variants.status, "revision")));
+    .where(
+      and(
+        eq(schema.variants.workspaceId, workspaceId),
+        eq(schema.videos.slug, slug),
+        eq(schema.variants.label, label),
+        eq(schema.variants.status, "revision"),
+      ),
+    );
   if (!row) return NextResponse.json({ error: "no pending revision" }, { status: 404 });
   await db()
     .update(schema.variants)

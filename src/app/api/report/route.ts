@@ -1,9 +1,9 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db, getSetting, schema, setSetting } from "@/db";
-import { hasBearer } from "@/lib/auth";
+import { db, getWorkspaceSetting, schema, setWorkspaceSetting } from "@/db";
 import { hasLlm } from "@/lib/llm";
+import { pipelineWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,8 @@ function unauthorized() {
 
 // Performance data for the local analysis routine (pipeline/ANALYZE_PROMPT.md).
 export async function GET(req: Request) {
-  if (!hasBearer(req, process.env.PIPELINE_SECRET)) return unauthorized();
+  const workspaceId = await pipelineWorkspace(req);
+  if (!workspaceId) return unauthorized();
   const rows = await db()
     .select({
       video: videos.title,
@@ -35,15 +36,21 @@ export async function GET(req: Request) {
     })
     .from(variants)
     .innerJoin(videos, eq(variants.videoId, videos.id))
-    .where(eq(variants.status, "published"))
+    .where(and(eq(variants.workspaceId, workspaceId), eq(variants.status, "published")))
     .orderBy(desc(variants.publishedAt));
   const ideas = await db()
     .select({ title: schema.ideas.title, status: schema.ideas.status })
     .from(schema.ideas)
+    .where(eq(schema.ideas.workspaceId, workspaceId))
     .orderBy(desc(schema.ideas.createdAt))
     .limit(50);
   // serverAnalysis: an AI is connected in Ajustes, so the server writes the analysis.
-  return NextResponse.json({ learnings: (await getSetting("learnings")) ?? "", posts: rows, ideas, serverAnalysis: await hasLlm() });
+  return NextResponse.json({
+    learnings: (await getWorkspaceSetting(workspaceId, "learnings")) ?? "",
+    posts: rows,
+    ideas,
+    serverAnalysis: await hasLlm(workspaceId),
+  });
 }
 
 const body = z.union([
@@ -61,10 +68,11 @@ const body = z.union([
 
 // The analysis routine saves its conclusions here; the local runner reports each run.
 export async function POST(req: Request) {
-  if (!hasBearer(req, process.env.PIPELINE_SECRET)) return unauthorized();
+  const workspaceId = await pipelineWorkspace(req);
+  if (!workspaceId) return unauthorized();
   const parsed = body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: z.prettifyError(parsed.error) }, { status: 400 });
-  if ("learnings" in parsed.data) await setSetting("learnings", parsed.data.learnings);
-  else await setSetting("runner", JSON.stringify({ ...parsed.data.heartbeat, at: Date.now() }));
+  if ("learnings" in parsed.data) await setWorkspaceSetting(workspaceId, "learnings", parsed.data.learnings);
+  else await setWorkspaceSetting(workspaceId, "runner", JSON.stringify({ ...parsed.data.heartbeat, at: Date.now() }));
   return NextResponse.json({ ok: true });
 }

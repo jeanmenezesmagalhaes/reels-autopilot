@@ -1,8 +1,10 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db, schema } from "@/db";
 import { getDictionary } from "@/i18n";
+import { rawUploadPrefix } from "@/lib/blob-host";
+import { requireWorkspace } from "@/lib/workspace";
 import { NewVideoForm } from "./new-video-form";
 
 export const metadata: Metadata = { title: "Novo vídeo · Reels Autopilot" };
@@ -11,10 +13,11 @@ export const dynamic = "force-dynamic";
 export default async function NewVideoPage() {
   const { t } = await getDictionary();
   const n = t.newVideo;
+  const { workspaceId } = await requireWorkspace();
   const ideas = await db()
     .select({ id: schema.ideas.id, title: schema.ideas.title })
     .from(schema.ideas)
-    .where(eq(schema.ideas.status, "planned"))
+    .where(and(eq(schema.ideas.workspaceId, workspaceId), eq(schema.ideas.status, "planned")))
     .orderBy(desc(schema.ideas.createdAt));
   return (
     <main className="mx-auto max-w-[640px] px-4 pt-6 pb-20 sm:px-8">
@@ -25,6 +28,7 @@ export default async function NewVideoPage() {
       <p className="mt-2 mb-8 text-[15px] text-ink-muted">{n.intro}</p>
       <NewVideoForm
         ideas={ideas}
+        uploadPrefix={rawUploadPrefix(workspaceId)}
         copy={{
           file: n.file,
           fileHint: n.fileHint,

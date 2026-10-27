@@ -35,7 +35,7 @@ export async function login(_prev: LoginState, form: FormData): Promise<LoginSta
   }
 
   await setSetting("login_failures", JSON.stringify({ count: 0, since: Date.now() }));
-  (await cookies()).set(SESSION_COOKIE, await createSession({ uid: 0, email: "owner", role: "owner" }), sessionCookieOptions);
+  (await cookies()).set(SESSION_COOKIE, await createSession({ uid: 0, email: "owner", role: "member" }), sessionCookieOptions);
   redirect("/");
 }
 

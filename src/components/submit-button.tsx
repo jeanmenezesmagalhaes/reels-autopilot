@@ -2,7 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 
-type Props = { children: React.ReactNode; pending: string; variant?: "primary" | "quiet" | "ink" | "card" };
+type Props = { children: React.ReactNode; pending: string; variant?: "primary" | "quiet" | "ink" | "card" | "danger" };
 
 const styles = {
   primary: "bg-ink text-ground hover:opacity-85 px-5 py-2 text-[15px] font-medium rounded-full",
@@ -10,6 +10,8 @@ const styles = {
   ink: "bg-ink text-ground hover:opacity-85 px-4 py-2 text-[15px] font-medium rounded-full",
   // Small pill for actions inside a grey card: white on the card, readable as a button.
   card: "bg-ground text-ink hover:bg-rule px-3 py-1 text-sm font-medium rounded-full",
+  // Irreversible actions (delete), always behind a disclosure.
+  danger: "text-bad ring-1 ring-bad/40 hover:bg-bad/10 px-5 py-2 text-[15px] font-medium rounded-full",
 };
 
 export function SubmitButton({ children, pending, variant = "quiet" }: Props) {

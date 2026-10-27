@@ -1,14 +1,15 @@
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db, schema } from "@/db";
-import { hasBearer } from "@/lib/auth";
+import { pipelineWorkspace } from "@/lib/workspace";
 
 export const dynamic = "force-dynamic";
 
 // What the Mac editor should pick up: videos uploaded from the dashboard (with the
 // creator's brief) and versions the creator asked to redo.
 export async function GET(req: Request) {
-  if (!hasBearer(req, process.env.PIPELINE_SECRET)) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const workspaceId = await pipelineWorkspace(req);
+  if (!workspaceId) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const uploads = await db()
     .select({
       slug: schema.videos.slug,
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
       rawUrl: schema.videos.rawUrl,
     })
     .from(schema.videos)
-    .where(eq(schema.videos.stage, "uploaded"));
+    .where(and(eq(schema.videos.workspaceId, workspaceId), eq(schema.videos.stage, "uploaded")));
   const revisions = await db()
     .select({
       slug: schema.videos.slug,
@@ -29,6 +30,6 @@ export async function GET(req: Request) {
     })
     .from(schema.variants)
     .innerJoin(schema.videos, eq(schema.variants.videoId, schema.videos.id))
-    .where(and(eq(schema.variants.status, "revision")));
+    .where(and(eq(schema.variants.workspaceId, workspaceId), eq(schema.variants.status, "revision")));
   return NextResponse.json({ uploads, revisions }, { headers: { "cache-control": "no-store" } });
 }

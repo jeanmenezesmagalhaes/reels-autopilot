@@ -5,6 +5,7 @@ import type { Dictionary } from "@/i18n/dictionaries";
 import { formatNumber, TZ } from "@/lib/format";
 import { listInstagramAccounts } from "@/lib/instagram-account";
 import { loadProfile } from "@/lib/profile";
+import { requireWorkspace } from "@/lib/workspace";
 import { PERIODS, type Period } from "../results";
 
 export const metadata: Metadata = { title: "Perfil · Reels Autopilot" };
@@ -23,7 +24,8 @@ export default async function ProfilePage({ searchParams }: { searchParams: Sear
   const period: Period = (PERIODS as readonly string[]).includes(params.periodo ?? "") ? (params.periodo as Period) : "30";
   const { t } = await getDictionary();
   const P = t.profile;
-  const accounts = await listInstagramAccounts();
+  const { workspaceId } = await requireWorkspace();
+  const accounts = await listInstagramAccounts(workspaceId);
   const account = accounts.find((a) => String(a.id) === params.conta) ?? accounts[0];
 
   if (!account) {

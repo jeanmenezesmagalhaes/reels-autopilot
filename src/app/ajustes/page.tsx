@@ -1,13 +1,24 @@
+import { asc, eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { Chevron } from "@/components/chevron";
+import { Disclosure } from "@/components/disclosure";
 import { SubmitButton } from "@/components/submit-button";
+import { db, schema } from "@/db";
 import { dictionaries, getDictionary, LOCALES } from "@/i18n";
 import { LLM_PROVIDERS } from "@/lib/llm";
-import { readSession, SESSION_COOKIE } from "@/lib/session";
 import { aiLabel, connectionStatus } from "@/lib/status";
-import { disconnectInstagram, moveLlmConnection, removeLlmConnection, setPreference, setPrincipalInstagram } from "../actions";
+import { isAdmin, requireWorkspace } from "@/lib/workspace";
+import {
+  deleteAccount,
+  disconnectInstagram,
+  grantAccess,
+  moveLlmConnection,
+  removeLlmConnection,
+  setPreference,
+  setPrincipalInstagram,
+} from "../actions";
 import { logout } from "../login/actions";
 import { KeyForm } from "./key-form";
 
@@ -18,15 +29,19 @@ const THEMES = ["system", "light", "dark"] as const;
 type SearchParams = Promise<{ ig?: string }>;
 
 // Everything a creator connects, in plain language: where videos are published
-// (Instagram), who edits and analyses them (AI), and the account itself.
+// (Instagram), who edits and analyses them (AI), and the account itself. Admins also
+// see who is waiting for access.
 export default async function SettingsPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const { locale, t } = await getDictionary();
   const s = t.settings;
   const jar = await cookies();
   const theme = jar.get("theme")?.value ?? "system";
-  const session = await readSession(jar.get(SESSION_COOKIE)?.value);
-  const { instagram, llms, subscriptions, lastSeen } = await connectionStatus();
+  const ws = await requireWorkspace();
+  const { instagram, llms, subscriptions, lastSeen } = await connectionStatus(ws.workspaceId);
+  const waitlist = (await isAdmin(ws))
+    ? await db().select().from(schema.users).where(eq(schema.users.role, "waitlist")).orderBy(asc(schema.users.createdAt))
+    : undefined;
   const ago = (ms: number) => new Intl.RelativeTimeFormat(t.intl, { numeric: "auto" }).format(-Math.round((Date.now() - ms) / 60000), "minute");
 
   return (
@@ -39,6 +54,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
       <Section id="instagram" title={s.igTitle} intro={s.igIntro}>
         {params.ig === "ok" && <Notice tone="ok">{t.header.igOk}</Notice>}
         {params.ig === "erro" && <Notice tone="bad">{t.header.igError}</Notice>}
+        {params.ig === "em-uso" && <Notice tone="bad">{t.header.igTaken}</Notice>}
         {instagram.length === 0 ? (
           <p className="text-[15px] text-ink-muted">{s.igEmpty}</p>
         ) : (
@@ -104,11 +120,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
           <p>{s.helperAfter}</p>
         </div>
 
-        <details className="group rounded-2xl border border-rule p-4">
-          <summary className="flex cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden">
-            <Chevron />
-            {s.advanced}
-          </summary>
+        <Disclosure
+          className="group rounded-2xl border border-rule p-4"
+          summaryClassName="flex cursor-pointer list-none items-center gap-2 font-semibold [&::-webkit-details-marker]:hidden"
+          summary={
+            <>
+              <Chevron />
+              {s.advanced}
+            </>
+          }
+        >
           {llms.length > 0 && (
             <ul className="mt-4 divide-y divide-rule rounded-2xl bg-ground-raised">
               {llms.map((c, i) => (
@@ -156,11 +177,11 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
               where: s.keyWhere(LLM_PROVIDERS[id].name),
             }))}
           />
-        </details>
+        </Disclosure>
       </Section>
 
       <Section title={s.accountTitle}>
-        {session && session.email !== "owner" && <p className="text-[15px]">{s.signedAs(session.email)}</p>}
+        {ws.userId !== 0 && <p className="text-[15px]">{s.signedAs(ws.email)}</p>}
         <div className="flex flex-wrap gap-3">
           <Segmented label={t.language}>
             {LOCALES.map((l) => (
@@ -182,7 +203,47 @@ export default async function SettingsPage({ searchParams }: { searchParams: Sea
             {t.login.logout}
           </SubmitButton>
         </form>
+        {ws.userId !== 0 && (
+          <Disclosure
+            summaryClassName="w-fit cursor-pointer list-none text-sm text-ink-muted underline-offset-4 hover:text-ink hover:underline [&::-webkit-details-marker]:hidden"
+            summary={s.deleteAccount}
+          >
+            <p className="mt-3 max-w-prose text-sm text-ink-muted">{s.deleteAccountHint}</p>
+            <form action={deleteAccount} className="mt-3">
+              <SubmitButton pending="…" variant="danger">
+                {s.deleteAccountConfirm}
+              </SubmitButton>
+            </form>
+          </Disclosure>
+        )}
       </Section>
+
+      {waitlist && (
+        <Section id="espera" title={s.waitlistTitle} intro={s.waitlistIntro}>
+          {waitlist.length === 0 ? (
+            <p className="text-[15px] text-ink-muted">{s.waitlistEmpty}</p>
+          ) : (
+            <ul className="divide-y divide-rule rounded-2xl bg-ground-raised">
+              {waitlist.map((u) => (
+                <li key={u.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold">{u.name ?? u.email}</p>
+                    <p className="truncate text-sm text-ink-muted">
+                      {u.name ? `${u.email} · ` : ""}
+                      {u.createdAt.toLocaleDateString(t.intl, { day: "numeric", month: "short" })}
+                    </p>
+                  </div>
+                  <form action={grantAccess.bind(null, u.id)}>
+                    <SubmitButton pending="…" variant="card">
+                      {s.grant}
+                    </SubmitButton>
+                  </form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
     </main>
   );
 }

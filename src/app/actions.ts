@@ -1,18 +1,26 @@
 "use server";
 
-import { and, eq, inArray } from "drizzle-orm";
+import { del } from "@vercel/blob";
+import { and, eq, inArray, isNotNull, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { db, getSetting, schema, setSetting } from "@/db";
+import { redirect } from "next/navigation";
+import { db, getWorkspaceSetting, schema, setWorkspaceSetting } from "@/db";
 import { makePrincipalInstagram, removeInstagram } from "@/lib/instagram-account";
-import { isOwnBlobUrl } from "@/lib/blob-host";
+import { isOwnBlobUrl, rawUploadPrefix } from "@/lib/blob-host";
 import { moveLlm, removeLlm, saveLlmKey, validateKey } from "@/lib/llm";
 import { tick } from "@/lib/scheduler";
+import { SESSION_COOKIE } from "@/lib/session";
+import { ensureWorkspace, isAdmin, requireWorkspace } from "@/lib/workspace";
+
+// Every action acts on the signed-in person's own workspace only; ids from the client
+// that point elsewhere simply match nothing.
 
 export async function togglePause() {
-  const paused = (await getSetting("paused")) === "true";
-  await setSetting("paused", String(!paused));
+  const { workspaceId } = await requireWorkspace();
+  const paused = (await getWorkspaceSetting(workspaceId, "paused")) === "true";
+  await setWorkspaceSetting(workspaceId, "paused", String(!paused));
   revalidatePath("/");
 }
 
@@ -21,16 +29,20 @@ const variantStatusInput = z.object({ id: z.number().int().positive(), status: z
 
 export async function setVariantStatus(rawId: number, rawStatus: "queued" | "skipped") {
   const { id, status } = variantStatusInput.parse({ id: rawId, status: rawStatus });
+  const { workspaceId } = await requireWorkspace();
   await db()
     .update(schema.variants)
     .set({ status, error: null, ...(status === "queued" ? { attempts: 0, containerId: null } : {}) })
     // Never touch published or in-flight posts.
-    .where(and(eq(schema.variants.id, id), inArray(schema.variants.status, ["queued", "failed"])));
+    .where(
+      and(eq(schema.variants.id, id), eq(schema.variants.workspaceId, workspaceId), inArray(schema.variants.status, ["queued", "failed"])),
+    );
   revalidatePath("/");
 }
 
 export async function postNextNow() {
-  const { log } = await tick({ force: true, deadlineMs: 40_000 });
+  const { workspaceId } = await requireWorkspace();
+  const { log } = await tick({ workspaceId, force: true, deadlineMs: 40_000 });
   console.log("post now:", log.join(" | "));
   revalidatePath("/");
 }
@@ -40,7 +52,8 @@ const ideaTitle = z.string().trim().min(2).max(140);
 export async function addIdea(form: FormData) {
   const title = ideaTitle.safeParse(form.get("title"));
   if (!title.success) return;
-  await db().insert(schema.ideas).values({ title: title.data, source: "jean" });
+  const { workspaceId } = await requireWorkspace();
+  await db().insert(schema.ideas).values({ workspaceId, title: title.data, source: "jean" });
   revalidatePath("/");
 }
 
@@ -48,10 +61,11 @@ const ideaStatusInput = z.object({ id: z.number().int().positive(), status: z.en
 
 export async function setIdeaStatus(rawId: number, rawStatus: "recorded" | "dropped") {
   const { id, status } = ideaStatusInput.parse({ id: rawId, status: rawStatus });
+  const { workspaceId } = await requireWorkspace();
   await db()
     .update(schema.ideas)
     .set({ status })
-    .where(and(eq(schema.ideas.id, id), eq(schema.ideas.status, "planned")));
+    .where(and(eq(schema.ideas.id, id), eq(schema.ideas.workspaceId, workspaceId), eq(schema.ideas.status, "planned")));
   revalidatePath("/");
 }
 
@@ -76,12 +90,14 @@ export async function setPreference(kind: "lang" | "theme", value: string) {
 const idInput = z.number().int().positive();
 
 export async function disconnectInstagram(id: number) {
-  await removeInstagram(idInput.parse(id));
+  const { workspaceId } = await requireWorkspace();
+  await removeInstagram(workspaceId, idInput.parse(id));
   revalidatePath("/", "layout");
 }
 
 export async function setPrincipalInstagram(id: number) {
-  await makePrincipalInstagram(idInput.parse(id));
+  const { workspaceId } = await requireWorkspace();
+  await makePrincipalInstagram(workspaceId, idInput.parse(id));
   revalidatePath("/", "layout");
 }
 
@@ -96,6 +112,7 @@ const keyInput = z.object({
 
 // Tests the key with the provider before saving it (encrypted).
 export async function addLlmKey(_prev: KeyState, form: FormData): Promise<KeyState> {
+  const { workspaceId } = await requireWorkspace();
   const parsed = keyInput.safeParse({ provider: form.get("provider"), key: form.get("key") });
   if (!parsed.success) return { result: "bad" };
   try {
@@ -103,30 +120,42 @@ export async function addLlmKey(_prev: KeyState, form: FormData): Promise<KeySta
   } catch {
     return { result: "bad" };
   }
-  await saveLlmKey(parsed.data.provider, parsed.data.key);
+  await saveLlmKey(workspaceId, parsed.data.provider, parsed.data.key);
   revalidatePath("/", "layout");
   return { result: "ok" };
 }
 
 export async function removeLlmConnection(id: number) {
-  await removeLlm(idInput.parse(id));
+  const { workspaceId } = await requireWorkspace();
+  await removeLlm(workspaceId, idInput.parse(id));
   revalidatePath("/", "layout");
 }
 
 export async function moveLlmConnection(id: number, direction: "up" | "down") {
-  await moveLlm(idInput.parse(id), z.enum(["up", "down"]).parse(direction));
+  const { workspaceId } = await requireWorkspace();
+  await moveLlm(workspaceId, idInput.parse(id), z.enum(["up", "down"]).parse(direction));
   revalidatePath("/", "layout");
 }
 
 // --- First-run guidance -------------------------------------------------------
 
 export async function dismissDemo() {
-  await setSetting("demo_dismissed", "true");
+  const { workspaceId } = await requireWorkspace();
+  await setWorkspaceSetting(workspaceId, "demo_dismissed", "true");
   revalidatePath("/", "layout");
 }
 
+// Leaves the first-run flow (finished or "Fazer depois"); anything skipped stays in
+// "Comece por aqui" on the dashboard.
+export async function finishOnboarding() {
+  const { workspaceId } = await requireWorkspace();
+  await setWorkspaceSetting(workspaceId, "onboarding_done", "true");
+  redirect("/");
+}
+
 export async function hideOnboarding() {
-  await setSetting("onboarding_hidden", "true");
+  const { workspaceId } = await requireWorkspace();
+  await setWorkspaceSetting(workspaceId, "onboarding_hidden", "true");
   revalidatePath("/", "layout");
 }
 
@@ -155,11 +184,23 @@ function slugify(text: string) {
 // The Mac editor downloads it on its next run and follows the instructions.
 export async function createVideo(input: z.input<typeof newVideo>) {
   const v = newVideo.parse(input);
-  await db()
-    .insert(schema.videos)
-    .values({ slug: slugify(v.title), title: v.title, brief: v.brief || null, baseCaption: v.baseCaption || null, rawUrl: v.rawUrl, stage: "uploaded" });
+  const { workspaceId } = await requireWorkspace();
+  // Only a file this person uploaded (the upload route hands out tokens per workspace).
+  if (!new URL(v.rawUrl).pathname.startsWith(`/${rawUploadPrefix(workspaceId)}`)) throw new Error("bad upload");
+  await db().insert(schema.videos).values({
+    workspaceId,
+    slug: slugify(v.title),
+    title: v.title,
+    brief: v.brief || null,
+    baseCaption: v.baseCaption || null,
+    rawUrl: v.rawUrl,
+    stage: "uploaded",
+  });
   if (v.ideaId) {
-    await db().update(schema.ideas).set({ status: "recorded" }).where(eq(schema.ideas.id, v.ideaId));
+    await db()
+      .update(schema.ideas)
+      .set({ status: "recorded" })
+      .where(and(eq(schema.ideas.id, v.ideaId), eq(schema.ideas.workspaceId, workspaceId)));
   }
   revalidatePath("/", "layout");
 }
@@ -168,12 +209,22 @@ export async function createVideo(input: z.input<typeof newVideo>) {
 
 const EDITABLE = ["queued", "failed", "revision"] as const;
 
+// Versions of the signed-in person's workspace, by id, in one of the given states.
+async function ownVersion(id: number, states: readonly (typeof EDITABLE)[number][]) {
+  const { workspaceId } = await requireWorkspace();
+  return and(
+    eq(schema.variants.id, idInput.parse(id)),
+    eq(schema.variants.workspaceId, workspaceId),
+    inArray(schema.variants.status, [...states]),
+  );
+}
+
 export async function updateCaption(id: number, form: FormData) {
   const caption = z.string().trim().max(2200).parse(form.get("caption") ?? "");
   await db()
     .update(schema.variants)
     .set({ caption })
-    .where(and(eq(schema.variants.id, idInput.parse(id)), inArray(schema.variants.status, [...EDITABLE])));
+    .where(await ownVersion(id, EDITABLE));
   revalidatePath("/", "layout");
 }
 
@@ -183,7 +234,7 @@ export async function requestRevision(id: number, form: FormData) {
   await db()
     .update(schema.variants)
     .set({ status: "revision", revisionNote: note })
-    .where(and(eq(schema.variants.id, idInput.parse(id)), inArray(schema.variants.status, ["queued", "failed", "revision"])));
+    .where(await ownVersion(id, ["queued", "failed", "revision"]));
   revalidatePath("/", "layout");
 }
 
@@ -191,14 +242,70 @@ export async function cancelVersion(id: number) {
   await db()
     .update(schema.variants)
     .set({ status: "skipped", revisionNote: null })
-    .where(and(eq(schema.variants.id, idInput.parse(id)), inArray(schema.variants.status, [...EDITABLE])));
+    .where(await ownVersion(id, EDITABLE));
   revalidatePath("/", "layout");
 }
 
 export async function cancelPendingVersions(videoId: number) {
+  const { workspaceId } = await requireWorkspace();
   await db()
     .update(schema.variants)
     .set({ status: "skipped", revisionNote: null })
-    .where(and(eq(schema.variants.videoId, idInput.parse(videoId)), inArray(schema.variants.status, [...EDITABLE])));
+    .where(
+      and(
+        eq(schema.variants.videoId, idInput.parse(videoId)),
+        eq(schema.variants.workspaceId, workspaceId),
+        inArray(schema.variants.status, [...EDITABLE]),
+      ),
+    );
   revalidatePath("/", "layout");
+}
+
+// --- Account --------------------------------------------------------------------
+
+// Erases the person and everything in their dashboard: ideas, videos, versions,
+// connected accounts, and the files still in Blob. Published Reels stay on Instagram.
+export async function deleteAccount() {
+  const { userId, workspaceId } = await requireWorkspace();
+  if (userId === 0) return; // password sign-in has no account to delete
+  const { variants, videos, connections, members, profileSnapshots, users, workspaces } = schema;
+  const others = await db()
+    .select({ userId: members.userId })
+    .from(members)
+    .where(and(eq(members.workspaceId, workspaceId), ne(members.userId, userId)));
+  if (others.length === 0) {
+    const files = [
+      ...(await db().select({ url: variants.blobUrl }).from(variants).where(eq(variants.workspaceId, workspaceId))),
+      ...(await db()
+        .select({ url: videos.rawUrl })
+        .from(videos)
+        .where(and(eq(videos.workspaceId, workspaceId), isNotNull(videos.rawUrl)))),
+    ]
+      .map((f) => f.url!)
+      .filter(isOwnBlobUrl);
+    if (files.length) await del(files).catch((err) => console.error("blob cleanup failed:", (err as Error).message));
+    const ig = await db()
+      .select({ id: connections.externalId })
+      .from(connections)
+      .where(and(eq(connections.workspaceId, workspaceId), eq(connections.kind, "instagram")));
+    if (ig.length) await db().delete(profileSnapshots).where(inArray(profileSnapshots.igUserId, ig.map((a) => a.id)));
+    await db().delete(workspaces).where(eq(workspaces.id, workspaceId));
+  }
+  await db().delete(users).where(eq(users.id, userId));
+  (await cookies()).delete(SESSION_COOKIE);
+  redirect("/login?excluido=1");
+}
+
+// --- Admin: early-access list -----------------------------------------------------
+
+export async function grantAccess(id: number) {
+  const ws = await requireWorkspace();
+  if (!(await isAdmin(ws))) return;
+  const [user] = await db()
+    .update(schema.users)
+    .set({ role: "member" })
+    .where(and(eq(schema.users.id, idInput.parse(id)), eq(schema.users.role, "waitlist")))
+    .returning();
+  if (user) await ensureWorkspace(user);
+  revalidatePath("/ajustes");
 }

@@ -1,12 +1,16 @@
 // Connection state shared by the dashboard, the onboarding checklist and Ajustes.
-import { getSetting } from "@/db";
+import { getWorkspaceSetting } from "@/db";
 import { listInstagramAccounts } from "./instagram-account";
 import { listLlmConnections } from "./llm";
 
 export type Runner = { provider: "claude" | "codex" | "none"; ok: boolean; at: number; connected?: ("claude" | "codex")[] };
 
-export async function connectionStatus() {
-  const [instagram, llms, runnerRaw] = await Promise.all([listInstagramAccounts(), listLlmConnections(), getSetting("runner")]);
+export async function connectionStatus(workspaceId: number) {
+  const [instagram, llms, runnerRaw] = await Promise.all([
+    listInstagramAccounts(workspaceId),
+    listLlmConnections(workspaceId),
+    getWorkspaceSetting(workspaceId, "runner"),
+  ]);
   const runner = runnerRaw ? (JSON.parse(runnerRaw) as Runner) : undefined;
   const macAi = runner && runner.provider !== "none" && runner.ok ? runner : undefined;
   // Subscriptions seen on the Mac in the last 2 days (older pings mean the helper is off).

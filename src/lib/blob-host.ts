@@ -12,3 +12,6 @@ export function isOwnBlobUrl(u: string) {
     return false;
   }
 }
+
+// Raw videos uploaded from the dashboard live under one folder per workspace.
+export const rawUploadPrefix = (workspaceId: number) => `uploads/${workspaceId}/`;

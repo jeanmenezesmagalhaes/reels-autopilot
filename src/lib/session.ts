@@ -6,7 +6,7 @@ import { safeEqual } from "./auth";
 export const SESSION_COOKIE = "session";
 export const SESSION_MAX_AGE_S = 30 * 24 * 60 * 60;
 
-export type Role = "owner" | "waitlist";
+export type Role = "member" | "waitlist";
 export type Session = { uid: number; email: string; role: Role; exp: number };
 
 const encoder = new TextEncoder();
@@ -47,8 +47,11 @@ export async function readSession(token: string | undefined): Promise<Session | 
   if (version !== "v2" || !body || !sig) return undefined;
   if (!safeEqual(sig, await hmac(secret, `v2.${body}`))) return undefined;
   try {
-    const s = JSON.parse(fromB64url(body)) as Session;
-    return s.exp > Date.now() && (s.role === "owner" || s.role === "waitlist") ? s : undefined;
+    const s = JSON.parse(fromB64url(body)) as Omit<Session, "role"> & { role: Role | "owner" };
+    if (s.exp <= Date.now()) return undefined;
+    // "owner" is how the single-user version named a member; those cookies keep working.
+    if (s.role === "owner") return { ...s, role: "member" };
+    return s.role === "member" || s.role === "waitlist" ? { ...s, role: s.role } : undefined;
   } catch {
     return undefined;
   }

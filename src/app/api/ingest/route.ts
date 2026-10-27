@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db, schema } from "@/db";
-import { hasBearer } from "@/lib/auth";
+import { pipelineWorkspace } from "@/lib/workspace";
 import { isOwnBlobUrl } from "@/lib/blob-host";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,8 @@ const body = z.object({
 });
 
 export async function POST(req: Request) {
-  if (!hasBearer(req, process.env.PIPELINE_SECRET)) {
+  const workspaceId = await pipelineWorkspace(req);
+  if (!workspaceId) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
   const parsed = body.safeParse(await req.json().catch(() => null));
@@ -38,13 +39,13 @@ export async function POST(req: Request) {
 
   const [video] = await db()
     .insert(schema.videos)
-    .values({ slug, title, sourceFile })
-    .onConflictDoUpdate({ target: schema.videos.slug, set: { title } })
+    .values({ workspaceId, slug, title, sourceFile })
+    .onConflictDoUpdate({ target: [schema.videos.workspaceId, schema.videos.slug], set: { title } })
     .returning();
   const rows = variants.length
     ? await db()
         .insert(schema.variants)
-        .values(variants.map((v) => ({ ...v, videoId: video.id })))
+        .values(variants.map((v) => ({ ...v, workspaceId, videoId: video.id })))
         .onConflictDoNothing()
         .returning({ id: schema.variants.id })
     : [];

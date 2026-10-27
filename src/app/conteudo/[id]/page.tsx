@@ -1,11 +1,13 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db, schema } from "@/db";
+import { Disclosure } from "@/components/disclosure";
 import { SubmitButton } from "@/components/submit-button";
 import { getDictionary } from "@/i18n";
 import { formatNumber, retention, statusTone, when } from "@/lib/format";
+import { requireWorkspace } from "@/lib/workspace";
 import { cancelPendingVersions, cancelVersion, requestRevision, updateCaption } from "../../actions";
 
 export const metadata: Metadata = { title: "Conteúdo · Reels Autopilot" };
@@ -20,7 +22,11 @@ export default async function ContentPage({ params }: { params: Promise<{ id: st
   if (!Number.isInteger(id) || id <= 0) notFound();
   const { t } = await getDictionary();
   const c = t.content;
-  const [video] = await db().select().from(schema.videos).where(eq(schema.videos.id, id));
+  const { workspaceId } = await requireWorkspace();
+  const [video] = await db()
+    .select()
+    .from(schema.videos)
+    .where(and(eq(schema.videos.id, id), eq(schema.videos.workspaceId, workspaceId)));
   if (!video) notFound();
   const versions = await db().select().from(schema.variants).where(eq(schema.variants.videoId, id)).orderBy(asc(schema.variants.id));
   const pending = versions.some((v) => v.status === "queued" || v.status === "failed" || v.status === "revision");
@@ -109,10 +115,10 @@ export default async function ContentPage({ params }: { params: Promise<{ id: st
                     )}
 
                     {editable && (
-                      <details className="group">
-                        <summary className="cursor-pointer list-none text-[15px] font-medium underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden">
-                          {c.redo}
-                        </summary>
+                      <Disclosure
+                        summaryClassName="cursor-pointer list-none text-[15px] font-medium underline-offset-4 hover:underline [&::-webkit-details-marker]:hidden"
+                        summary={c.redo}
+                      >
                         <form action={requestRevision.bind(null, v.id)} className="mt-2 flex flex-col gap-2">
                           <textarea name="note" rows={3} minLength={3} maxLength={1000} required placeholder={c.redoPh} className={field} />
                           <div>
@@ -121,7 +127,7 @@ export default async function ContentPage({ params }: { params: Promise<{ id: st
                             </SubmitButton>
                           </div>
                         </form>
-                      </details>
+                      </Disclosure>
                     )}
 
                     {editable && (

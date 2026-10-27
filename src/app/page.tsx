@@ -1,40 +1,67 @@
-import { desc, eq } from "drizzle-orm";
-import { db, getSetting, schema } from "@/db";
+import { and, desc, eq } from "drizzle-orm";
+import { db, getWorkspaceSetting, schema } from "@/db";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { SubmitButton } from "@/components/submit-button";
 import { getDictionary } from "@/i18n";
 import { when } from "@/lib/format";
+import { timeline } from "@/lib/projection";
 import { estimateNextPostAt, pickNext } from "@/lib/scheduler";
 import { connectionStatus } from "@/lib/status";
+import { requireWorkspace } from "@/lib/workspace";
 import { dismissDemo, postNextNow, togglePause } from "./actions";
 import { Board } from "./board";
+import { Calendar, currentMonth } from "./calendar";
 import { demoContent } from "./demo";
+import { List } from "./list";
 import { Onboarding } from "./onboarding";
 import { PERIODS, Results, type Period } from "./results";
+import { homeHref, inStatus, matches, SORTS, STATUSES, Toolbar, VIEWS, type HomeParams, type Sort, type StatusFilter, type View } from "./views";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type SearchParams = Promise<{ view?: string; periodo?: string }>;
+type SearchParams = Promise<{ view?: string; periodo?: string; q?: string; status?: string; ordem?: string; mes?: string }>;
+
+const pick = <T extends string>(options: readonly T[], value: string | undefined, fallback: T) =>
+  (options as readonly string[]).includes(value ?? "") ? (value as T) : fallback;
 
 export default async function Home({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const view = params.view === "resultados" ? "resultados" : "quadro";
-  const period: Period = (PERIODS as readonly string[]).includes(params.periodo ?? "") ? (params.periodo as Period) : "30";
+  const view = pick<View>(VIEWS, params.view, "quadro");
+  const period = pick<Period>(PERIODS, params.periodo, "30");
+  const month = /^\d{4}-(0[1-9]|1[0-2])$/.test(params.mes ?? "") ? params.mes! : currentMonth();
+  const home: HomeParams = {
+    view,
+    q: (params.q ?? "").trim().slice(0, 100),
+    status: pick<StatusFilter>(STATUSES, params.status, "tudo"),
+    ordem: pick<Sort>(SORTS, params.ordem, "data"),
+    mes: params.mes && month === params.mes ? month : undefined,
+  };
   const { locale, t } = await getDictionary();
   const h = t.header;
+  const { workspaceId } = await requireWorkspace();
+  const setting = (key: string) => getWorkspaceSetting(workspaceId, key);
   const [videos, variants, ideas, paused, learnings, next, nextAt, status, demoDismissed, onboardingHidden] = await Promise.all([
-    db().select().from(schema.videos).orderBy(desc(schema.videos.createdAt)),
-    db().select().from(schema.variants),
-    db().select().from(schema.ideas).where(eq(schema.ideas.status, "planned")).orderBy(desc(schema.ideas.createdAt)),
-    getSetting("paused"),
-    getSetting("learnings").then((l) => l || undefined),
-    pickNext(),
-    estimateNextPostAt(),
-    connectionStatus(),
-    getSetting("demo_dismissed"),
-    getSetting("onboarding_hidden"),
+    db().select().from(schema.videos).where(eq(schema.videos.workspaceId, workspaceId)).orderBy(desc(schema.videos.createdAt)),
+    db().select().from(schema.variants).where(eq(schema.variants.workspaceId, workspaceId)),
+    db()
+      .select()
+      .from(schema.ideas)
+      .where(and(eq(schema.ideas.workspaceId, workspaceId), eq(schema.ideas.status, "planned")))
+      .orderBy(desc(schema.ideas.createdAt)),
+    setting("paused"),
+    setting("learnings").then((l) => l || undefined),
+    pickNext(workspaceId),
+    estimateNextPostAt(workspaceId),
+    connectionStatus(workspaceId),
+    setting("demo_dismissed"),
+    setting("onboarding_hidden"),
   ]);
+  // Brand-new dashboard: set things up first, one step per screen (app/comecar).
+  if (!status.principalIg && videos.length === 0 && ideas.length === 0 && (await setting("onboarding_done")) !== "true") {
+    redirect("/comecar");
+  }
   const ig = status.principalIg;
   const tokenAlert = ig?.status === "error";
   const isPaused = paused === "true";
@@ -88,14 +115,21 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
   const demo = showDemo ? demoContent(locale) : undefined;
   const hasResult = variants.some((v) => v.status === "published" && v.views != null);
   const steps = [
-    { key: "instagram" as const, done: igReady, href: "/api/instagram/connect" },
-    { key: "ai" as const, done: status.aiReady, href: "/ajustes#ia" },
+    { key: "instagram" as const, done: igReady, href: "/comecar?passo=instagram" },
+    { key: "ai" as const, done: status.aiReady, href: "/comecar?passo=ia" },
     { key: "video" as const, done: videos.length > 0, href: "/novo" },
     { key: "result" as const, done: hasResult },
   ];
   const showOnboarding = onboardingHidden !== "true" && steps.some((s) => !s.done);
 
   const canControl = igReady && waiting > 0 && !publishing;
+  // List and Calendar share one row per version, dated by when it went or should go out.
+  const shown = { ideas: demo?.ideas ?? ideas, videos: demo?.videos ?? videos, variants: demo?.variants ?? variants };
+  const entries = timeline(shown.videos, shown.variants, { postsPerDay, canPost: Boolean(demo) || (igReady && !isPaused) });
+  const filtered = entries.filter((e) => matches(home.q, e.video.title, e.variant.label) && inStatus(e, home.status));
+  const nothing = home.q ? t.filters.nothingFor(home.q) : home.status !== "tudo" ? t.filters.nothing : t.list.empty;
+  const calendarNote = demo ? undefined : !igReady ? t.calendar.noIg : isPaused ? t.calendar.paused : undefined;
+
   const navStatus = !igReady ? h.igMissingShort : `${ig.label} · ${isPaused ? h.paused : h.running(postsPerDay)}`;
 
   return (
@@ -162,21 +196,6 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
 
       <main className="mx-auto max-w-[1200px] px-4 pb-16 sm:px-8">
         {showOnboarding && <Onboarding t={t} steps={steps} />}
-        <nav aria-label={t.tabs.label} className="mb-8 inline-flex rounded-full bg-ground-raised p-1 text-[15px] font-medium">
-          {[
-            { id: "quadro", label: t.tabs.board },
-            { id: "resultados", label: t.tabs.results },
-          ].map((tab) => (
-            <a
-              key={tab.id}
-              href={tab.id === "quadro" ? "/" : "/?view=resultados"}
-              aria-current={tab.id === view ? "page" : undefined}
-              className={`rounded-full px-4 py-1.5 ${tab.id === view ? "bg-ground text-ink shadow-[0_1px_3px_rgba(0,0,0,0.12)]" : "text-ink-muted hover:text-ink"}`}
-            >
-              {tab.label}
-            </a>
-          ))}
-        </nav>
         {demo && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-dashed border-rule px-4 py-3">
             <p className="text-[15px] text-ink-muted">{t.demo.banner}</p>
@@ -187,18 +206,23 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
             </form>
           </div>
         )}
+        <Toolbar t={t} p={home} entries={entries} />
         {view === "resultados" ? (
-          <Results
-            t={t}
-            period={period}
-            videos={demo?.videos ?? videos}
-            variants={demo?.variants ?? variants}
-            learnings={demo?.learnings ?? learnings}
-          />
-        ) : demo ? (
-          <Board t={t} demoTag={t.demo.tag} ideas={demo.ideas} videos={demo.videos} variants={demo.variants} />
+          <Results t={t} period={period} videos={shown.videos} variants={shown.variants} learnings={demo?.learnings ?? learnings} />
+        ) : view === "lista" ? (
+          <List t={t} entries={filtered} sort={home.ordem} demo={Boolean(demo)} empty={nothing} />
+        ) : view === "calendario" ? (
+          <Calendar t={t} entries={filtered} month={month} hrefFor={(mes) => homeHref(home, { mes })} note={calendarNote} demo={Boolean(demo)} />
         ) : (
-          <Board t={t} ideas={ideas} videos={videos} variants={variants} nextVariantId={next?.id} nextAt={isPaused ? undefined : nextAt} />
+          <Board
+            t={t}
+            demoTag={demo && t.demo.tag}
+            ideas={shown.ideas.filter((i) => matches(home.q, i.title, i.notes))}
+            videos={shown.videos.filter((v) => matches(home.q, v.title) || shown.variants.some((x) => x.videoId === v.id && matches(home.q, x.label)))}
+            variants={shown.variants}
+            nextVariantId={demo ? undefined : next?.id}
+            nextAt={demo || isPaused ? undefined : nextAt}
+          />
         )}
       </main>
     </>

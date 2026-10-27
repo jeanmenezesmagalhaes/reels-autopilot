@@ -63,15 +63,16 @@ const copy = {
   },
 };
 
-const base = { caption: "", revisionNote: null, containerId: null, mediaId: null, permalink: null, error: null, attempts: 0, reach: null, likes: null, comments: null, metricsAt: null };
+// Examples are never stored, so they belong to no workspace.
+const base = { workspaceId: 0, caption: "", revisionNote: null, containerId: null, mediaId: null, permalink: null, error: null, attempts: 0, reach: null, likes: null, comments: null, metricsAt: null };
 
 export function demoContent(locale: Locale, now = Date.now()) {
   const c = copy[locale];
   const ideas: Idea[] = c.ideas.map(([title, notes], i) => ({
-    id: -(i + 1), title, notes, source: i === 0 ? "analise" : "jean", status: "planned", createdAt: new Date(now - i * H),
+    id: -(i + 1), workspaceId: 0, title, notes, source: i === 0 ? "analise" : "jean", status: "planned", createdAt: new Date(now - i * H),
   }));
   const videos: Video[] = c.videos.map((title, i) => ({
-    id: -(i + 1), slug: `exemplo-${i + 1}`, title, sourceFile: null, brief: null, baseCaption: null, rawUrl: null, stage: "editing",
+    id: -(i + 1), workspaceId: 0, slug: `exemplo-${i + 1}`, title, sourceFile: null, brief: null, baseCaption: null, rawUrl: null, stage: "editing",
     createdAt: new Date(now - (i === 2 ? 1 : 3 - i) * D),
   }));
   const v = (id: number, videoId: number, label: string, extra: Partial<Variant>): Variant => ({
